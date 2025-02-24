@@ -36,3 +36,9 @@ awsTest4/gradlew
 
 *.dm
 output-metadata.json
+gradlew.bat
+gradlew
+gradle/wrapper/gradle-wrapper.properties
+gradle/wrapper/gradle-wrapper.jar
+/app/src/androidTest
+/app/src/test
