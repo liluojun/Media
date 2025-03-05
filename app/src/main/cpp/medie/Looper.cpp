@@ -44,7 +44,7 @@ Looper::Looper() {
 
 Looper::~Looper() {
     if (running) {
-        ALOGD("Looper deleted while still running. Some messages will not be processed");
+        LOGD("Looper deleted while still running. Some messages will not be processed");
         quit();
     }
 }
@@ -123,7 +123,7 @@ void Looper::addMessage(LooperMessage *msg, bool flush) {
     } else {
         head = msg;
     }
-    ALOGD("post msg %d", msg->what);
+    LOGD("post msg %d", msg->what);
     sem_post(&headwriteprotect);
     sem_post(&headdataavailable);
 }
@@ -140,7 +140,7 @@ void Looper::loop() {
         sem_wait(&headwriteprotect);
         LooperMessage *msg = head;
         if (msg == NULL) {
-            ALOGD("no msg");
+            LOGD("no msg");
             sem_post(&headwriteprotect);
             continue;
         }
@@ -148,11 +148,11 @@ void Looper::loop() {
         sem_post(&headwriteprotect);
 
         if (msg->quit) {
-            ALOGD("quitting");
+            LOGD("quitting");
             delete msg;
             return;
         }
-        ALOGD("processing msg %d", msg->what);
+        LOGD("processing msg %d", msg->what);
         handleMessage(msg);
         delete msg;
     }
@@ -162,7 +162,7 @@ void Looper::loop() {
  * 退出Looper循环
  */
 void Looper::quit() {
-    ALOGD("quit");
+    LOGD("quit");
     LooperMessage *msg = new LooperMessage();
     msg->what = 0;
     msg->obj = NULL;
@@ -182,5 +182,5 @@ void Looper::quit() {
  * @param data
  */
 void Looper::handleMessage(LooperMessage *msg) {
-    ALOGD("dropping msg %d %p", msg->what, msg->obj);
+    LOGD("dropping msg %d %p", msg->what, msg->obj);
 }

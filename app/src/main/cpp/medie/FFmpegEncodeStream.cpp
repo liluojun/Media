@@ -4,6 +4,7 @@
 
 #include "FFmpegEncodeStream.h"
 #include <pthread.h>
+#include "Utils.cpp"
 
 #define MAX_AUDIO_FRAME_SIZE 44100
 typedef struct {
@@ -18,6 +19,11 @@ typedef struct {
 } decodeContext;
 char *videoPath = NULL;
 bool close_thread = true;
+FrameCallback *mFrameCallback = NULL;
+
+void FFmpegEncodeStream::setFrameCallback(FrameCallback *callback) {
+    mFrameCallback = callback;
+}
 
 int decodeVideo() {
     decodeContext context = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, -1, -1,
@@ -32,10 +38,13 @@ int decodeVideo() {
     if (mDecodeContext->mAVformat == NULL) {
         return 0;
     }
-    int result = avformat_open_input(&(mDecodeContext->mAVformat), mDecodeContext->path, NULL,
+    int result = avformat_open_input(&(mDecodeContext->mAVformat),
+                                     mDecodeContext->path, NULL,
                                      NULL);
     if (result != 0) {
-        LOGE("avformat_open_input ERROR");
+        char error_buf[AV_ERROR_MAX_STRING_SIZE] = {0};
+        av_strerror(result, error_buf, sizeof(error_buf));
+        LOGE("avformat_open_input failed: [%d]%s", result, error_buf);
         return 0;
     }
 
@@ -150,6 +159,7 @@ int decodeVideo() {
                     break;
                 }
                 while (ret >= 0 && close_thread) {
+                    av_frame_unref(mDecodeContext->mAVFrame);
                     ret = avcodec_receive_frame(mDecodeContext->mAVCodecCtx,
                                                 mDecodeContext->mAVFrame);
 
@@ -162,7 +172,9 @@ int decodeVideo() {
                     switch (mDecodeContext->mAVCodecCtx->codec_id) {
                         case AV_CODEC_ID_H265:
                         case AV_CODEC_ID_H264:
-
+                            if (NULL != mFrameCallback) {
+                                mFrameCallback->onFrameEncoded(mDecodeContext->mAVFrame);
+                            }
                             break;
                         case AV_CODEC_ID_MPEG4:
                             break;
@@ -215,8 +227,7 @@ void *decodeStream(void *arg) {
 
 int FFmpegEncodeStream::openStream(char *path) {
     pthread_t id;
-    videoPath = (char *) malloc(strlen(path));
-    stpcpy(videoPath, path);
+    videoPath = path;
     avcodec_register_all();
     avformat_network_init();
     int err = pthread_create(&id, NULL, decodeStream, NULL);

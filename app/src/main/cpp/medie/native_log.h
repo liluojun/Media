@@ -4,6 +4,7 @@
 
 #ifndef CAINCAMERA_NATIVE_LOG_H
 #define CAINCAMERA_NATIVE_LOG_H
+
 #include <android/log.h>
 
 #define JNI_DEBUG 1
@@ -14,9 +15,11 @@
 #define LOGD(format, ...) if (JNI_DEBUG) { __android_log_print(ANDROID_LOG_DEBUG, JNI_TAG, format, ##__VA_ARGS__); }
 #define LOGW(format, ...) if (JNI_DEBUG) { __android_log_print(ANDROID_LOG_WARN,  JNI_TAG, format, ##__VA_ARGS__); }
 #define ERROR_CODE_TO_INT(code) static_cast<int>(code)
-#endif //CAINCAMERA_NATIVE_LOG_H
-enum class ErrorCode{
+enum class ErrorCode {
     SUCCESS = 0,
-    ERROR_UNKNOWN = -1,
+    ERROR_UNKNOWN = -1,//一般性错误
+    PATH_ALREADY_EXIST = -2,//该视频流已存在
+    PLAYER_NOT_EXIST = -3,//player对象不存在
 
 };
+#endif //CAINCAMERA_NATIVE_LOG_H

@@ -1,0 +1,24 @@
+
+
+//
+// Created by hjt on 2025/3/4.
+//
+#ifndef FRAME_CALLBACK_H
+#define FRAME_CALLBACK_H
+
+#include <stdint.h>
+#include "libavformat/avformat.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+class FrameCallback {
+public:
+    virtual ~FrameCallback() = default;
+
+    virtual void onFrameEncoded(AVFrame *mAVFrame) = 0;
+};
+#ifdef __cplusplus
+}
+#endif
+#endif

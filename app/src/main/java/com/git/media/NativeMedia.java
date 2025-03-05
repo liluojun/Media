@@ -1,0 +1,26 @@
+package com.git.media;
+
+public class NativeMedia {
+
+    static{
+        System.loadLibrary("medie");
+        System.loadLibrary("avcodec");
+        System.loadLibrary("avfilter");
+        System.loadLibrary("avformat");
+        System.loadLibrary("avutil");
+        System.loadLibrary("swresample");
+        System.loadLibrary("swscale");
+    }
+    public static native int openStream(String path);
+
+    public static native int closeStream(String path);
+
+    public static native int creatSurface(String path, Object surface, int w, int h);
+
+    public static native int changeSurfaceSize(String path, int w, int h);
+
+    public static native int destorySurface(String path);
+
+    public static native int init();
+
+}

@@ -26,6 +26,8 @@ public:
 
     virtual void handleMessage(LooperMessage *msg);
 
+    bool getIsSurfaceCreated();
+
 private:
     VideoRender *mRender;
 

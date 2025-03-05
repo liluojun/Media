@@ -3,10 +3,8 @@
 //
 #ifndef EGLUTILS_C
 #define EGLUTILS_C
-#define  LOGE(...) __android_log_print(ANDROID_LOG_ERROR,"ffmpeg",__VA_ARGS__)
 #include <EGL/egl.h>
 #include <string.h>
-#include <android/log.h>
 #include "GlRendering.h"
 #include <GLES2/gl2.h>
 #include <iostream>

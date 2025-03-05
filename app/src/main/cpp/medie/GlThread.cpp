@@ -50,6 +50,16 @@ void GlThread::handleMessage(LooperMessage *msg) {
     }
 }
 
+bool GlThread::getIsSurfaceCreated() {
+    if (mRender)
+        return mRender->isSurfaceCreated;
+    else
+        return false;
+}
+
 GlThread::~GlThread() {
-    delete mRender;
+    if (mRender) {
+        delete mRender;
+        mRender = nullptr;  // 避免野指针
+    }
 }

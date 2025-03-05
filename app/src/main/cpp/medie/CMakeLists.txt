@@ -17,6 +17,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(LOCAL_PATH ${CMAKE_CURRENT_SOURCE_DIR})  # 等效于 $(call my-dir)
 set(YUV_LIB_DIR "${LOCAL_PATH}/ffmpeg/${ANDROID_ABI}")
 set(MEDIE_SOURCES
+        native.cpp
+        JniUtils.cpp
         FFmpegEncodeStream.cpp
         VideoRender.cpp
         EglEnvironment.cpp
@@ -25,6 +27,8 @@ set(MEDIE_SOURCES
         GlDraw.cpp
         GlThread.cpp
         Looper.cpp
+        Utils.cpp
+        MediaController.cpp
 
 )
 # 添加预编译的 so
@@ -53,10 +57,10 @@ set_target_properties(swscale PROPERTIES
         IMPORTED_LOCATION "${YUV_LIB_DIR}/lib/libswscale.so"
 )
 include_directories("${YUV_LIB_DIR}/include")
-add_library(${PROJECT_NAME}  SHARED  ${MEDIE_SOURCES})
+add_library(${PROJECT_NAME} SHARED ${MEDIE_SOURCES})
 
 # 链接依赖库
-target_link_libraries(${PROJECT_NAME}  PRIVATE
+target_link_libraries(${PROJECT_NAME} PRIVATE
         avformat
         avcodec
         avfilter

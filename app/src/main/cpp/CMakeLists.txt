@@ -28,7 +28,7 @@ project("medie")
 # used in the AndroidManifest.xml file.
 #add_subdirectory(decode)#添加子目录
 add_subdirectory(medie)
-add_subdirectory(yuv)
+#add_subdirectory(yuv)
 # Specifies libraries CMake should link to your target library. You
 # can link libraries from various origins, such as libraries defined in this
 # build script, prebuilt third-party libraries, or Android system libraries.
