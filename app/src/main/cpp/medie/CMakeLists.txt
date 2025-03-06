@@ -20,11 +20,13 @@ set(MEDIE_SOURCES
         native.cpp
         JniUtils.cpp
         FFmpegEncodeStream.cpp
+        AiLineHelper.cpp
         VideoRender.cpp
         EglEnvironment.cpp
         EglUtils.cpp
         GlRendering.cpp
         GlDraw.cpp
+        GlDrawAi.cpp
         GlThread.cpp
         Looper.cpp
         Utils.cpp

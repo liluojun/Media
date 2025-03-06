@@ -4,33 +4,6 @@
 
 #include "GlDraw.h"
 
-std::string VERTEX_SHADER_STRING =
-        "varying vec2 interp_tc;\n"
-        "attribute vec4 in_pos;\n"
-        "attribute vec4 in_tc;\n"
-        "\n"
-        "uniform mat4 texMatrix;\n"
-        "\n"
-        "void main() {\n"
-        "    gl_Position = in_pos;\n"
-        "    interp_tc = (texMatrix * in_tc).xy;\n"
-        "}\n";
-std::string YUV_FRAGMENT_SHADER_STRING =
-        "precision mediump float;\n"
-        "varying vec2 interp_tc;\n"
-        "\n"
-        "uniform sampler2D y_tex;\n"
-        "uniform sampler2D u_tex;\n"
-        "uniform sampler2D v_tex;\n"
-        "\n"
-        "void main() {\n"
-        "  float y = texture2D(y_tex, interp_tc).r;\n"
-        "  float u = texture2D(u_tex, interp_tc).r - 0.5;\n"
-        "  float v = texture2D(v_tex, interp_tc).r - 0.5;\n"
-        "  gl_FragColor = vec4(y + 1.403 * v, "
-        "                      y - 0.344 * u - 0.714 * v, "
-        "                      y + 1.77 * u, 1);\n"
-        "}\n";
 
 void GlDraw::perparDrawYuv(int width, int height, YuvData *data, GLuint yuvTextures[3]) {
     int planeWidths[3] = {width, width / 2, width / 2};
@@ -106,7 +79,6 @@ void GlDraw::drawRectangle(int x, int y, int width, int height) {
 }
 
 void GlDraw::prepareShader(std::string fragmentShader, float *texMatrix) {
-
     if (shaders.count(fragmentShader) > 0) {
         Shader shader = shaders[fragmentShader];
         shader.glShader.useProgram();

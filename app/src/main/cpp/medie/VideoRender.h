@@ -15,7 +15,7 @@
 #include "EglEnvironment.h"
 #include "GlRendering.h"
 #include "GlDraw.h"
-
+#include "GlDrawAi.h"
 using namespace std;
 
 #endif
@@ -26,6 +26,7 @@ typedef struct {
     int h = 0;
     EGLSurface mEGLSurface = NULL;
     GlDraw *mGlDraw = NULL;
+    GlDrawAi *mGlDrawAi = NULL;
     EglEnvironment *mEglEnvironment = NULL;
 
 } RenderWindow;

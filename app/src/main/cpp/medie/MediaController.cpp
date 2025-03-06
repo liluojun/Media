@@ -12,8 +12,8 @@ int MediaController::openStream(std::string *path) {
 
         player->mGlThread = new GlThread();
         pathPlayerMap[*path] = player;
-        player->setupCallback();
         player->mFFmpegEncodeStream->openStream(stringToChar(*path).data());
+        player->setupCallback();
     } else {
         result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
         LOGE("Player for path %s already exists", path);

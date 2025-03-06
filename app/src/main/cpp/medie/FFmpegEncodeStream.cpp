@@ -1,245 +1,161 @@
-//
-// Created by Administrator on 2020/3/21.
-//
-
 #include "FFmpegEncodeStream.h"
 #include <pthread.h>
 #include "Utils.cpp"
 
+
 #define MAX_AUDIO_FRAME_SIZE 44100
-typedef struct {
-    AVCodec *mAVCodec, *mAVAudioCodec;
-    AVFrame *mAVFrame;
-    AVPacket *mAVPacket;
-    AVFormatContext *mAVformat;
-    AVCodecContext *mAVCodecCtx;
-    AVCodecContext *mAVAudioCodecCtx;
-    int videoIndex, audioIndex;
-    char *path;
-} decodeContext;
-char *videoPath = NULL;
-bool close_thread = true;
-FrameCallback *mFrameCallback = NULL;
 
-void FFmpegEncodeStream::setFrameCallback(FrameCallback *callback) {
-    mFrameCallback = callback;
-}
 
-int decodeVideo() {
-    decodeContext context = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, -1, -1,
-                             NULL};
-    decodeContext *mDecodeContext = &context;
-    if (videoPath != NULL) {
-        mDecodeContext->path = videoPath;
-    } else {
-        return 0;
-    }
-    mDecodeContext->mAVformat = avformat_alloc_context();
-    if (mDecodeContext->mAVformat == NULL) {
-        return 0;
-    }
-    int result = avformat_open_input(&(mDecodeContext->mAVformat),
-                                     mDecodeContext->path, NULL,
-                                     NULL);
-    if (result != 0) {
-        char error_buf[AV_ERROR_MAX_STRING_SIZE] = {0};
-        av_strerror(result, error_buf, sizeof(error_buf));
-        LOGE("avformat_open_input failed: [%d]%s", result, error_buf);
-        return 0;
+
+void* decodeThread(void* arg) {
+    DecodeContext *ctx = static_cast<DecodeContext*>(arg);
+    AVCodec *videoCodec = nullptr, *audioCodec = nullptr;
+
+    // 打开输入文件
+    if (avformat_open_input(&ctx->formatCtx, ctx->filePath, nullptr, nullptr) != 0) {
+        LOGE("Failed to open input file");
+        delete ctx;
+        return nullptr;
     }
 
-    result = avformat_find_stream_info(mDecodeContext->mAVformat, NULL);
-    if (result < 0) {
-        LOGE("avformat_find_stream_info ERROR");
-        return 0;
+    if (avformat_find_stream_info(ctx->formatCtx, nullptr) < 0) {
+        LOGE("Failed to find stream information");
+        delete ctx;
+        return nullptr;
     }
-    if (mDecodeContext->mAVformat == NULL) {
-        LOGE("mDecodeContext->mAVformat  ERROR");
-        return 0;
-    }
-    if (mDecodeContext->mAVformat->nb_streams == NULL) {
-        LOGE("mDecodeContext->mAVformat->nb_streams  ERROR");
-        return 0;
-    }
-    for (int i = 0; i < mDecodeContext->mAVformat->nb_streams; i++) {
-        if (mDecodeContext->mAVformat->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
-            mDecodeContext->videoIndex = i;
-            break;
+
+    // 查找视频和音频流
+    for (unsigned int i = 0; i < ctx->formatCtx->nb_streams; i++) {
+        AVCodecParameters *codecParams = ctx->formatCtx->streams[i]->codecpar;
+        if (codecParams->codec_type == AVMEDIA_TYPE_VIDEO && ctx->videoStreamIndex == -1) {
+            ctx->videoStreamIndex = i;
+            videoCodec = avcodec_find_decoder(codecParams->codec_id);
+        } else if (codecParams->codec_type == AVMEDIA_TYPE_AUDIO && ctx->audioStreamIndex == -1) {
+            ctx->audioStreamIndex = i;
+            audioCodec = avcodec_find_decoder(codecParams->codec_id);
         }
     }
-    for (int i = 0; i < mDecodeContext->mAVformat->nb_streams; i++) {
-        if (mDecodeContext->mAVformat->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
-            mDecodeContext->audioIndex = i;
-            break;
+
+    // 初始化视频解码器
+    if (ctx->videoStreamIndex != -1 && videoCodec) {
+        ctx->videoCodecCtx = avcodec_alloc_context3(videoCodec);
+        avcodec_parameters_to_context(ctx->videoCodecCtx, 
+            ctx->formatCtx->streams[ctx->videoStreamIndex]->codecpar);
+        if (avcodec_open2(ctx->videoCodecCtx, videoCodec, nullptr) < 0) {
+            LOGE("Failed to open video codec");
+            delete ctx;
+            return nullptr;
         }
     }
-    AVCodecParameters *avCodecParameters = mDecodeContext->mAVformat->streams[mDecodeContext->videoIndex]->codecpar;
-    mDecodeContext->mAVCodecCtx = avcodec_alloc_context3(NULL);
-    if (mDecodeContext->mAVCodecCtx == NULL) {
-        LOGE("mDecodeContext->mAVCodecCtx  ERROR");
-        return 0;
-    }
-    if (avcodec_parameters_to_context(mDecodeContext->mAVCodecCtx, avCodecParameters) < 0) {
-    }
-    mDecodeContext->mAVCodec = avcodec_find_decoder(mDecodeContext->mAVCodecCtx->codec_id);
-    //mDecodeContext->mAVCodec = avcodec_find_decoder_by_name("h264_mediacodec");
-    if (mDecodeContext->mAVCodec == NULL) {
-        LOGE("mDecodeContext->mAVCodec  ERROR");
-        return 0;
-    }
-    result = avcodec_open2(mDecodeContext->mAVCodecCtx, mDecodeContext->mAVCodec, NULL);
-    if (result < 0) {
-        LOGE("avcodec_open2  ERROR %d", result);
-        return 0;
-    }
-    AVCodecParameters *avAudioCodecParameters = mDecodeContext->mAVformat->streams[mDecodeContext->audioIndex]->codecpar;
-    mDecodeContext->mAVAudioCodecCtx = avcodec_alloc_context3(NULL);
-    if (mDecodeContext->mAVAudioCodecCtx == NULL) {
-        LOGE("mDecodeContext->mAVCodecCtx  ERROR");
-        return 0;
-    }
-    if (avcodec_parameters_to_context(mDecodeContext->mAVAudioCodecCtx, avAudioCodecParameters) <
-        0) {
-    }
-    mDecodeContext->mAVAudioCodec = avcodec_find_decoder(
-            mDecodeContext->mAVAudioCodecCtx->codec_id);
-    if (mDecodeContext->mAVAudioCodec == NULL) {
-        LOGE("mDecodeContext->mAVCodec  ERROR");
-        return 0;
-    }
-    if (avcodec_open2(mDecodeContext->mAVAudioCodecCtx, mDecodeContext->mAVAudioCodec, NULL) < 0) {
-        LOGE("avcodec_open2  ERROR");
-        return 0;
-    }
-    mDecodeContext->mAVFrame = av_frame_alloc();
-    if (!mDecodeContext->mAVFrame) {
-        LOGE("av_frame_alloc  ERROR");
-        return 0;
+
+    // 初始化音频解码器
+    if (ctx->audioStreamIndex != -1 && audioCodec) {
+        ctx->audioCodecCtx = avcodec_alloc_context3(audioCodec);
+        avcodec_parameters_to_context(ctx->audioCodecCtx,
+            ctx->formatCtx->streams[ctx->audioStreamIndex]->codecpar);
+        if (avcodec_open2(ctx->audioCodecCtx, audioCodec, nullptr) < 0) {
+            LOGE("Failed to open audio codec");
+            delete ctx;
+            return nullptr;
+        }
+
+        // 初始化音频重采样
+        ctx->swrCtx = swr_alloc_set_opts(nullptr,
+            AV_CH_LAYOUT_STEREO, AV_SAMPLE_FMT_S16, 44100,
+            ctx->audioCodecCtx->channel_layout, ctx->audioCodecCtx->sample_fmt,
+            ctx->audioCodecCtx->sample_rate, 0, nullptr);
+        swr_init(ctx->swrCtx);
     }
 
-    mDecodeContext->mAVPacket = av_packet_alloc();
-    if (mDecodeContext->mAVPacket == NULL) {
-        LOGE("av_packet_alloc  ERROR");
-        return 0;
-    }
-    SwrContext *swrCtx = swr_alloc();
-    //重采样设置选项-----------------------------------------------------------start
-    //输入的采样格式
-    enum AVSampleFormat in_sample_fmt = mDecodeContext->mAVAudioCodecCtx->sample_fmt;
-    //输出的采样格式 16bit PCM
-    enum AVSampleFormat out_sample_fmt = AV_SAMPLE_FMT_S16;
-    //输入的采样率
-    int in_sample_rate = mDecodeContext->mAVAudioCodecCtx->sample_rate;
-    //输出的采样率
-    int out_sample_rate = 44100;
-    //输入的声道布局
-    uint64_t in_ch_layout = mDecodeContext->mAVAudioCodecCtx->channel_layout;
-    //输出的声道布局
-    uint64_t out_ch_layout = AV_CH_LAYOUT_STEREO;
+    ctx->frame = av_frame_alloc();
+    ctx->packet = av_packet_alloc();
+    uint8_t *audioBuffer = nullptr;
+    int audioBufferSize = 0;
 
-    swr_alloc_set_opts(swrCtx, out_ch_layout, out_sample_fmt, out_sample_rate, in_ch_layout,
-                       in_sample_fmt,
-                       in_sample_rate, 0, 0);
-    swr_init(swrCtx);
-    //存储pcm数据
-    uint8_t *out_buffer;
-    av_samples_alloc(&out_buffer, NULL, 2, out_sample_rate,
-                     AV_SAMPLE_FMT_S16, 0);
-    //重采样设置选项-----------------------------------------------------------end
-    int ret, got_frame, framecount = 0;
-    while (close_thread) {
-        if (av_read_frame(mDecodeContext->mAVformat, mDecodeContext->mAVPacket) >= 0 &&
-            close_thread) {
-            if (mDecodeContext->mAVPacket->stream_index == mDecodeContext->videoIndex &&
-                close_thread) {
-                LOGE("解码视频帧");
-                int ret = avcodec_send_packet(mDecodeContext->mAVCodecCtx,
-                                              mDecodeContext->mAVPacket);
-                if (ret < 0) {
-                    break;
-                }
-                while (ret >= 0 && close_thread) {
-                    av_frame_unref(mDecodeContext->mAVFrame);
-                    ret = avcodec_receive_frame(mDecodeContext->mAVCodecCtx,
-                                                mDecodeContext->mAVFrame);
+    while (!ctx->abortRequest) {
+        if (av_read_frame(ctx->formatCtx, ctx->packet) < 0)
+            break;
 
-                    if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-                        break;
-                    } else if (ret < 0) {
-
-                        break;
+        if (ctx->packet->stream_index == ctx->videoStreamIndex) {
+            // 处理视频帧
+            if (avcodec_send_packet(ctx->videoCodecCtx, ctx->packet) == 0) {
+                while (avcodec_receive_frame(ctx->videoCodecCtx, ctx->frame) == 0) {
+                    if (ctx->frameCallback) {
+                        ctx->frameCallback->onFrameEncoded(ctx->frame);
                     }
-                    switch (mDecodeContext->mAVCodecCtx->codec_id) {
-                        case AV_CODEC_ID_H265:
-                        case AV_CODEC_ID_H264:
-                            if (NULL != mFrameCallback) {
-                                mFrameCallback->onFrameEncoded(mDecodeContext->mAVFrame);
-                            }
-                            break;
-                        case AV_CODEC_ID_MPEG4:
-                            break;
-                    }
-
-                }
-            } else if (mDecodeContext->mAVPacket->stream_index == mDecodeContext->audioIndex &&
-                       close_thread) {
-                LOGE("解码音频帧");
-                ret = avcodec_decode_audio4(mDecodeContext->mAVAudioCodecCtx,
-                                            mDecodeContext->mAVFrame,
-                                            &got_frame, mDecodeContext->mAVPacket);
-                if (ret < 0) {
-                    printf("%s", "解码完成");
-                }
-                //非0，正在解码
-                if (close_thread) {
-                    //printf("解码%d帧", framecount++);
-                    int64_t delay = swr_get_delay(swrCtx, mDecodeContext->mAVFrame->sample_rate);
-                    int64_t out_count = av_rescale_rnd(
-                            mDecodeContext->mAVFrame->nb_samples + delay, //本次要处理的数据个数
-                            out_sample_rate,
-                            mDecodeContext->mAVFrame->sample_rate,
-                            AV_ROUND_UP);
-                    //LOGE("解码%d帧", framecount++);
-                    int count = swr_convert(swrCtx, &out_buffer, out_count,
-                                            (const uint8_t **) mDecodeContext->mAVFrame->data,
-                                            mDecodeContext->mAVFrame->nb_samples);
-                    int size = av_samples_get_buffer_size(NULL, 2, out_count,
-                                                          out_sample_fmt, 1);
-
-
                 }
             }
-            av_packet_unref(mDecodeContext->mAVPacket);
+        } else if (ctx->packet->stream_index == ctx->audioStreamIndex) {
+            // 处理音频帧
+            if (avcodec_send_packet(ctx->audioCodecCtx, ctx->packet) == 0) {
+                while (avcodec_receive_frame(ctx->audioCodecCtx, ctx->frame) == 0) {
+                    // 重采样音频
+                    int outSamples = swr_get_out_samples(ctx->swrCtx, ctx->frame->nb_samples);
+                    int bufSize = av_samples_get_buffer_size(nullptr, 2, outSamples, 
+                                                           AV_SAMPLE_FMT_S16, 1);
+                    if (audioBufferSize < bufSize) {
+                        av_free(audioBuffer);
+                        audioBuffer = static_cast<uint8_t*>(av_malloc(bufSize));
+                        audioBufferSize = bufSize;
+                    }
+
+                    uint8_t *outBuffers[] = {audioBuffer};
+                    swr_convert(ctx->swrCtx, outBuffers, outSamples, 
+                              (const uint8_t**)ctx->frame->data, ctx->frame->nb_samples);
+
+                    if (ctx->audioCallback) {
+                        ctx->audioCallback->onAudioEncoded(audioBuffer, bufSize);
+                    }
+                }
+            }
         }
+
+        av_packet_unref(ctx->packet);
     }
-    av_free(out_buffer);
-    swr_free(&swrCtx);
-    av_frame_free(&mDecodeContext->mAVFrame);
-    avcodec_close(mDecodeContext->mAVCodecCtx);
-    avcodec_close(mDecodeContext->mAVAudioCodecCtx);
-    avformat_close_input(&mDecodeContext->mAVformat);
+
+    // 清理资源
+    av_free(audioBuffer);
+    delete ctx;
+    return nullptr;
 }
 
-
-void *decodeStream(void *arg) {
-    int i = decodeVideo();
-}
-
-int FFmpegEncodeStream::openStream(char *path) {
-    pthread_t id;
-    videoPath = path;
-    avcodec_register_all();
-    avformat_network_init();
-    int err = pthread_create(&id, NULL, decodeStream, NULL);
-    if (err != 0) {
-        LOGE("thread error");
-        return ERROR_CODE_TO_INT(ErrorCode::ERROR_UNKNOWN);
-    }
-    return ERROR_CODE_TO_INT(ErrorCode::SUCCESS);
-}
+FFmpegEncodeStream::FFmpegEncodeStream() : decodeCtx(nullptr), threadId(0) {}
 
 FFmpegEncodeStream::~FFmpegEncodeStream() {
-    close_thread = false;
-    free(videoPath);
+    closeStream();
+}
 
+void FFmpegEncodeStream::setFrameCallback(FrameCallback *callback) {
+    //std::lock_guard<std::mutex> lock(mutex);
+    if (decodeCtx) decodeCtx->frameCallback = callback;
+}
+
+void FFmpegEncodeStream::setAudioCallback(AudioCallback *callback) {
+   // std::lock_guard<std::mutex> lock(mutex);
+    if (decodeCtx) decodeCtx->audioCallback = callback;
+}
+
+bool FFmpegEncodeStream::openStream(const char *filePath) {
+    //std::lock_guard<std::mutex> lock(mutex);
+    closeStream();
+
+    decodeCtx = new DecodeContext();
+    decodeCtx->filePath = av_strdup(filePath);
+    
+    if (pthread_create(&threadId, nullptr, decodeThread, decodeCtx) != 0) {
+        delete decodeCtx;
+        decodeCtx = nullptr;
+        return false;
+    }
+    return true;
+}
+
+void FFmpegEncodeStream::closeStream() {
+   // std::lock_guard<std::mutex> lock(mutex);
+    if (decodeCtx) {
+        decodeCtx->abortRequest = true;
+        pthread_join(threadId, nullptr);
+        delete decodeCtx;
+        decodeCtx = nullptr;
+    }
 }

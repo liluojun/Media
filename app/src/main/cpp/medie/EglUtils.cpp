@@ -51,7 +51,7 @@ static std::string getEGLErrorString(int error) {
 static void checkNoGLES2Error(char *msg) {
     GLenum error = glGetError();
     if (error != GL_NO_ERROR) {
-        LOGE("checkNoGLES2Error %s: GLES20 error: %d", msg, error);
+        //LOGE("checkNoGLES2Error %s: GLES20 error: %d", msg, error);
     }
 
 }

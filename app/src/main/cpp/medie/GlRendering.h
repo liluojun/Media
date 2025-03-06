@@ -18,7 +18,7 @@ public:
 
     int GlShader(char *vertexSource, char *fragmentSource);
 
-    void setVertexAttribArray(GLchar *label,
+    GLint setVertexAttribArray(GLchar *label,
                               int dimension,
                               int stride, const void *pointer);
 

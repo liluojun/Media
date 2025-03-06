@@ -12,7 +12,7 @@ class MainActivity : AppCompatActivity() {
     //var nativeMedia: NativeMedia = NativeMedia()
     companion object {
         val TAG = "MainActivity"
-        val path = "rtmp://ns8.indexforce.com/home/mystream"//"http://kbs-dokdo.gscdn.com/dokdo_300/_definst_/dokdo_300.stream/playlist.m3u8"
+        val path ="http://kbs-dokdo.gscdn.com/dokdo_300/_definst_/dokdo_300.stream/playlist.m3u8"
     }
 
     fun dip2px(context: Context, dpValue: Float): Int {

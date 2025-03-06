@@ -3,9 +3,16 @@
 //
 
 #include "GlThread.h"
+#include "AiLineHelper.h"
+#include "Utils.cpp"
 
 GlThread::GlThread() {
     mRender = new VideoRender();
+    mAiFrame = new AiFrame();
+    AiLineHelper *mAiLineHelper = new AiLineHelper();
+    mAiFrame->data = new AiLineData();
+    mAiLineHelper->creatAiLineData(mAiFrame->data);
+    mAiFrame->timestamp = getTimestampMillis();
 }
 
 
@@ -36,17 +43,42 @@ void GlThread::handleMessage(LooperMessage *msg) {
                 if (mRender->m != NULL) {
                     glClearColor(1.0, 1.0, 1.0, 1.0);
                     glClear(GL_STENCIL_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-                    GLuint yuvTextures[3];
 
-                    mRender->m->mGlDraw->perparDrawYuv(msg->arg1, msg->arg2,
-                                                       (YuvData *) msg->obj, yuvTextures);
-                    delete ((YuvData *) msg->obj);
-                    mRender->m->mGlDraw->drawYuv(yuvTextures, 0, 0, mRender->m->w, mRender->m->h);
-
+                    drawVideoFrames(mRender->m, (YuvData *) msg->obj, msg->arg1,
+                                    msg->arg2);
+                   // drawAiFrames(mRender->m);
                     mRender->m->mEglEnvironment->swapBuffers();
+
+
                 }
             }
             break;
+        case kMsgAiFrame: {
+            if (mAiFrame) {
+                mAiFrame->data = (AiLineData *) msg->obj;
+                mAiFrame->timestamp = getTimestampMillis();
+            }
+        }
+    }
+}
+
+void GlThread::drawVideoFrames(RenderWindow *m, YuvData *data, int w, int h) {
+    GLuint yuvTextures[3];
+    m->mGlDraw->perparDrawYuv(w, h, data, yuvTextures);
+    delete (data);
+    m->mGlDraw->drawYuv(yuvTextures, 0, 0, m->w, m->h);
+}
+
+void GlThread::drawAiFrames(RenderWindow *m) {
+    if (mAiFrame && mAiFrame->data) {
+        if (getTimestampMillis() - mAiFrame->timestamp > 30000) {
+            delete (mAiFrame->data);
+            mAiFrame->data = nullptr;
+            mAiFrame->timestamp = 0;
+        } else {
+            m->mGlDrawAi->drawAi(mAiFrame->data);
+        }
+
     }
 }
 
@@ -62,4 +94,10 @@ GlThread::~GlThread() {
         delete mRender;
         mRender = nullptr;  // 避免野指针
     }
+    if (mAiFrame) {
+        delete mAiFrame;
+        mAiFrame = nullptr;
+    }
 }
+
+

@@ -6,36 +6,16 @@
 #define PLAYVIDEO_GLDRAW_H
 
 #include "YuvData.h"
-#include "GlRendering.h"
+#include "Shader.h"
 #include "EglUtils.cpp"
 #include <iostream>
 #include <map>
+#include "GlShaderText.h"
 
-typedef struct Shader {
-    GlRendering glShader;
-    int texMatrixLocation;
-} Shader;
 
 class GlDraw {
 public:
-    const float FULL_RECTANGLE_BUF[8] = {-1.0f, -1.0f, // Bottom left.
-                                         1.0f, -1.0f, // Bottom right.
-                                         -1.0f, 1.0f, // Top left.
-                                         1.0f, 1.0f, // Top right.
-    };
 
-    // Texture coordinates - (0, 0) is bottom-left and (1, 1) is top-right.
-    const float FULL_RECTANGLE_TEX_BUF[8] = {
-            0.0f, 0.0f, // Bottom left.
-            1.0f, 0.0f, // Bottom right.
-            0.0f, 1.0f, // Top left.
-            1.0f, 1.0f // Top right.
-    };
-
-    float matrix4x4[16] = {1.0, 0.0, 0.0, 0.0,
-                           -0.0, -1.0, 0.0, -0.0,
-                           0.0, 0.0, 1.0, 0.0,
-                           0.0, 1.0, 0.0, 1.0};
     std::map<std::string, Shader> shaders;
 
     void prepareShader(std::string fragmentShader, float *texMatrix);

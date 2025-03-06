@@ -9,12 +9,18 @@
 #include "Looper.h"
 #include "VideoRender.h"
 #include "YuvData.h"
+#include "AiLineHelper.h"
 
 enum {
     kMsgSurfaceCreated,
     kMsgSurfaceChanged,
     kMsgSurfaceDestroyed,
-    kMsgYuvData
+    kMsgYuvData,
+    kMsgAiFrame,
+};
+typedef struct AiFrame {
+    long timestamp;
+    AiLineData *data;
 };
 
 class GlThread : public Looper {
@@ -30,7 +36,11 @@ public:
 
 private:
     VideoRender *mRender;
+    AiFrame *mAiFrame;
 
+    void drawVideoFrames(RenderWindow *m, YuvData *pData, int arg1, int arg2);
+
+    void drawAiFrames(RenderWindow *m);
 };
 
 

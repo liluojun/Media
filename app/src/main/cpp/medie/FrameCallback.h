@@ -18,6 +18,12 @@ public:
 
     virtual void onFrameEncoded(AVFrame *mAVFrame) = 0;
 };
+class AudioCallback {
+public:
+    virtual ~AudioCallback() = default;
+
+    virtual void onAudioEncoded(uint8_t *mData,int size) = 0;
+};
 #ifdef __cplusplus
 }
 #endif

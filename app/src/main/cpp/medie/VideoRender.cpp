@@ -17,6 +17,7 @@ long VideoRender::creatSurface(ANativeWindow *mWindow, jint w, jint h) {
     m->mEglEnvironment = new EglEnvironment();
     m->mEGLSurface = m->mEglEnvironment->createWindowSurface(m->mWindow);
     m->mGlDraw = new GlDraw();
+    m->mGlDrawAi = new GlDrawAi();
     m->handel = -1;
     m->h = h;
     m->w = w;
@@ -30,6 +31,7 @@ int VideoRender::destorySurface() {
         ANativeWindow_release(m->mWindow);
         m->mEglEnvironment->releaseSurface(m->mEGLSurface);
         m->mGlDraw->release();
+        m->mGlDrawAi->release();
         delete m;
         return 0;
     } else {
