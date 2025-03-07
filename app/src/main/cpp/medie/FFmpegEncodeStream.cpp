@@ -5,10 +5,43 @@
 
 #define MAX_AUDIO_FRAME_SIZE 44100
 
+bool containsSEI(const uint8_t *data, int size) {
+    for (int i = 0; i < size - 4; i++) {
+        if (data[i] == 0x00 && data[i + 1] == 0x00 &&
+            data[i + 2] == 0x00 && data[i + 3] == 0x06) { // NAL Unit Type 6 (SEI)
+            return true;
+        }
+    }
+    return false;
+}
 
+bool extractSEIData(const uint8_t *data, int size, uint8_t **seiData, int *seiSize) {
+    for (int i = 0; i < size - 4; i++) {
+        if (data[i] == 0x00 && data[i + 1] == 0x00 &&
+            data[i + 2] == 0x00 && data[i + 3] == 0x06) { // SEI NAL 头
+            int seiStart = i + 4;
+            int seiEnd = size;
 
-void* decodeThread(void* arg) {
-    DecodeContext *ctx = static_cast<DecodeContext*>(arg);
+            // 计算 SEI 结束位置
+            for (int j = seiStart; j < size - 3; j++) {
+                if (data[j] == 0x00 && data[j + 1] == 0x00 &&
+                    (data[j + 2] == 0x01 || data[j + 2] == 0x03)) { // 下一个 NAL 头
+                    seiEnd = j;
+                    break;
+                }
+            }
+
+            *seiSize = seiEnd - seiStart;
+            *seiData = (uint8_t *) malloc(*seiSize);
+            memcpy(*seiData, data + seiStart, *seiSize);
+            return true;
+        }
+    }
+    return false;
+}
+
+void *decodeThread(void *arg) {
+    DecodeContext *ctx = static_cast<DecodeContext *>(arg);
     AVCodec *videoCodec = nullptr, *audioCodec = nullptr;
 
     // 打开输入文件
@@ -39,8 +72,8 @@ void* decodeThread(void* arg) {
     // 初始化视频解码器
     if (ctx->videoStreamIndex != -1 && videoCodec) {
         ctx->videoCodecCtx = avcodec_alloc_context3(videoCodec);
-        avcodec_parameters_to_context(ctx->videoCodecCtx, 
-            ctx->formatCtx->streams[ctx->videoStreamIndex]->codecpar);
+        avcodec_parameters_to_context(ctx->videoCodecCtx,
+                                      ctx->formatCtx->streams[ctx->videoStreamIndex]->codecpar);
         if (avcodec_open2(ctx->videoCodecCtx, videoCodec, nullptr) < 0) {
             LOGE("Failed to open video codec");
             delete ctx;
@@ -52,7 +85,7 @@ void* decodeThread(void* arg) {
     if (ctx->audioStreamIndex != -1 && audioCodec) {
         ctx->audioCodecCtx = avcodec_alloc_context3(audioCodec);
         avcodec_parameters_to_context(ctx->audioCodecCtx,
-            ctx->formatCtx->streams[ctx->audioStreamIndex]->codecpar);
+                                      ctx->formatCtx->streams[ctx->audioStreamIndex]->codecpar);
         if (avcodec_open2(ctx->audioCodecCtx, audioCodec, nullptr) < 0) {
             LOGE("Failed to open audio codec");
             delete ctx;
@@ -61,9 +94,10 @@ void* decodeThread(void* arg) {
 
         // 初始化音频重采样
         ctx->swrCtx = swr_alloc_set_opts(nullptr,
-            AV_CH_LAYOUT_STEREO, AV_SAMPLE_FMT_S16, 44100,
-            ctx->audioCodecCtx->channel_layout, ctx->audioCodecCtx->sample_fmt,
-            ctx->audioCodecCtx->sample_rate, 0, nullptr);
+                                         AV_CH_LAYOUT_STEREO, AV_SAMPLE_FMT_S16, 44100,
+                                         ctx->audioCodecCtx->channel_layout,
+                                         ctx->audioCodecCtx->sample_fmt,
+                                         ctx->audioCodecCtx->sample_rate, 0, nullptr);
         swr_init(ctx->swrCtx);
     }
 
@@ -77,6 +111,24 @@ void* decodeThread(void* arg) {
             break;
 
         if (ctx->packet->stream_index == ctx->videoStreamIndex) {
+            /* 自动sei帧解析// SEI检测逻辑
+             for (int i = 0; i < ctx->packet->side_data_elems; i++) {
+                 AVPacketSideData* sd = &ctx->packet->side_data[i];
+                 if (sd->type == AV_PKT_DATA_SEI ) {
+                     // 示例：打印SEI数据长度
+                     LOGD("Got SEI data size: %d", sd->size)
+                 }
+             }*/
+            // 手动动sei帧解析检查 SEI NAL 单元，H265不确定是否使用
+            if (containsSEI(ctx->packet->data, ctx->packet->size)) {
+                // 提取 SEI 数据
+                uint8_t *seiData = nullptr;
+                int seiSize = 0;
+                if (extractSEIData(ctx->packet->data, ctx->packet->size, &seiData, &seiSize)) {
+                    LOGD("Got SEI data size: %d", seiSize)
+                    free(seiData);
+                }
+            }
             // 处理视频帧
             if (avcodec_send_packet(ctx->videoCodecCtx, ctx->packet) == 0) {
                 while (avcodec_receive_frame(ctx->videoCodecCtx, ctx->frame) == 0) {
@@ -91,17 +143,17 @@ void* decodeThread(void* arg) {
                 while (avcodec_receive_frame(ctx->audioCodecCtx, ctx->frame) == 0) {
                     // 重采样音频
                     int outSamples = swr_get_out_samples(ctx->swrCtx, ctx->frame->nb_samples);
-                    int bufSize = av_samples_get_buffer_size(nullptr, 2, outSamples, 
-                                                           AV_SAMPLE_FMT_S16, 1);
+                    int bufSize = av_samples_get_buffer_size(nullptr, 2, outSamples,
+                                                             AV_SAMPLE_FMT_S16, 1);
                     if (audioBufferSize < bufSize) {
                         av_free(audioBuffer);
-                        audioBuffer = static_cast<uint8_t*>(av_malloc(bufSize));
+                        audioBuffer = static_cast<uint8_t *>(av_malloc(bufSize));
                         audioBufferSize = bufSize;
                     }
 
                     uint8_t *outBuffers[] = {audioBuffer};
-                    swr_convert(ctx->swrCtx, outBuffers, outSamples, 
-                              (const uint8_t**)ctx->frame->data, ctx->frame->nb_samples);
+                    swr_convert(ctx->swrCtx, outBuffers, outSamples,
+                                (const uint8_t **) ctx->frame->data, ctx->frame->nb_samples);
 
                     if (ctx->audioCallback) {
                         ctx->audioCallback->onAudioEncoded(audioBuffer, bufSize);
@@ -131,7 +183,7 @@ void FFmpegEncodeStream::setFrameCallback(FrameCallback *callback) {
 }
 
 void FFmpegEncodeStream::setAudioCallback(AudioCallback *callback) {
-   // std::lock_guard<std::mutex> lock(mutex);
+    // std::lock_guard<std::mutex> lock(mutex);
     if (decodeCtx) decodeCtx->audioCallback = callback;
 }
 
@@ -141,7 +193,7 @@ bool FFmpegEncodeStream::openStream(const char *filePath) {
 
     decodeCtx = new DecodeContext();
     decodeCtx->filePath = av_strdup(filePath);
-    
+
     if (pthread_create(&threadId, nullptr, decodeThread, decodeCtx) != 0) {
         delete decodeCtx;
         decodeCtx = nullptr;
@@ -151,7 +203,7 @@ bool FFmpegEncodeStream::openStream(const char *filePath) {
 }
 
 void FFmpegEncodeStream::closeStream() {
-   // std::lock_guard<std::mutex> lock(mutex);
+    // std::lock_guard<std::mutex> lock(mutex);
     if (decodeCtx) {
         decodeCtx->abortRequest = true;
         pthread_join(threadId, nullptr);

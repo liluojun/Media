@@ -63,12 +63,17 @@ typedef struct DecodeContext {
 class FFmpegEncodeStream {
 private: DecodeContext *decodeCtx; pthread_t threadId ;
 public:
+    bool containsSEI(const uint8_t *data, int size);
+
+    bool extractSEIData(const uint8_t *data, int size, uint8_t **seiData, int *seiSize);
     FFmpegEncodeStream();
     bool openStream(const char *path);
     void setFrameCallback(FrameCallback *callback);
     void setAudioCallback(AudioCallback *callback);
     void closeStream();
     ~FFmpegEncodeStream();
+
+
 };
 
 #ifdef __cplusplus
