@@ -19,15 +19,18 @@
 class GlDrawAi {
     std::map<std::string, Shader> shaders;
 
-    Shader prepareShader( std::string vertexShader,std::string fragmentShader);
+    Shader prepareShader(std::string vertexShader, std::string fragmentShader, int w, int h);
 
+    GLint fboTextureId;
 
 public:
-    void drawAi(AiLineData *pData);
+    void drawAi(AiLineData *pData, int w, int h,int vw, int vh);
 
     void release();
 
-    void drawSegment(AiLineData *pData);
+    void drawSegment(AiLineData *pData, int w, int h,int vw, int vh);
+
+    GLint getFboTexture();
 };
 
 

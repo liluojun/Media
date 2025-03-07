@@ -30,8 +30,16 @@ public:
     void useProgram();
 
     void release();
+    void initFBO(int width, int height);
+    GLint getFBO();
+    GLint getFboTexture();
 private:
     GLint program = -1;
+    GLuint fbo, fboTexture;
+    GLuint smartShaderProgram;
+    GLuint smartPositionLoc, smartColorLoc;
+
+
 };
 
 

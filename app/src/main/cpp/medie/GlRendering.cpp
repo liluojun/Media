@@ -8,8 +8,14 @@ GlRendering::GlRendering() {
 
 }
 
+GLint GlRendering::getFBO() {
+    return fbo;
+}
+GLint GlRendering::getFboTexture() {
+    return fboTexture;
+}
 GlRendering::GlRendering(char *vertexSource, char *fragmentSource) {
-    const char* version = (const char*)glGetString(GL_VERSION);
+    const char *version = (const char *) glGetString(GL_VERSION);
     LOGE("GL_VERSION: %s", version);
     GlShader(vertexSource, fragmentSource);
 }
@@ -29,7 +35,7 @@ int compileShader(int shaderType, char *source) {
     glGetShaderiv(shader, GL_COMPILE_STATUS, &compileStatus);
     if (compileStatus != GL_TRUE) {
         GLint logLength = 0;
-        glGetShaderiv(shader,GL_INFO_LOG_LENGTH, &logLength);
+        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLength);
         char *log = (char *) malloc(logLength);
         glGetShaderInfoLog(shader, logLength, nullptr, log);
         LOGE("compileShader() failed. GLES20 error:%s ", log);
@@ -145,27 +151,28 @@ void GlRendering::release() {
         program = -1;
     }
 }
-// 创建帧缓冲对象
-GLuint GlRendering::createFBO(GLuint& textureID,int width, int height) {
-    GLuint fbo;
+
+void GlRendering::initFBO(int width, int height) {
     glGenFramebuffers(1, &fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_2D, textureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureID, 0);
+    glGenTextures(1, &fboTexture);
+    glBindTexture(GL_TEXTURE_2D, fboTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 
-    GLuint rbo;
-    glGenRenderbuffers(1, &rbo);
-    glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_STENCIL_OES, width, height);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo);
+    // 必须设置纹理参数！
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fboTexture, 0);
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cerr << "FBO not complete!" << std::endl;
+        // 打印错误信息
+        LOGE("glCheckFramebufferStatus() failed");
     }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    return fbo;
+    glBindFramebuffer(GL_FRAMEBUFFER, GL_NONE);
 }
+
+

@@ -40,7 +40,8 @@ private:
 
     void drawVideoFrames(RenderWindow *m, YuvData *pData, int arg1, int arg2);
 
-    void drawAiFrames(RenderWindow *m);
+    bool drawAiFrames(RenderWindow *m, int w, int h);
+    void drawFboMix(RenderWindow *m, int w, int h);
 };
 
 

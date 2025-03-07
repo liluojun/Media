@@ -71,5 +71,39 @@ static float matrix4x4[16] = {1.0, 0.0, 0.0, 0.0,
                               0.0, 0.0, 1.0, 0.0,
                               0.0, 1.0, 0.0, 1.0};
 /*******************YUV顶点片源着色器 END*****************************/
+/********************FBO混合着色器******************************/
+// 顶点着色器
+static const char* FBO_VERTEX_SHADER_STRING =
+        "attribute vec4 aPosition;\n"
+        "attribute vec2 aTexCoord;\n"
+        "varying vec2 vTexCoord;\n"
+        "void main() {\n"
+        "    gl_Position = aPosition;\n"
+        "    vTexCoord = aTexCoord;\n"
+        "}";
 
+// 片段着色器
+static const char* FBO_FRAGMENT_SHADER_STRING =
+        "precision mediump float;\n"
+        "varying vec2 vTexCoord;\n"
+        "uniform sampler2D uTexture;\n"
+        "void main() {\n"
+        "    gl_FragColor = texture2D(uTexture, vTexCoord);\n"
+        "}";
+// 顶点坐标（NDC坐标系，覆盖整个屏幕）
+static const GLfloat vertices[] = {
+        -1.0f, -1.0f,  // 左下
+        1.0f, -1.0f,  // 右下
+        -1.0f,  1.0f,  // 左上
+        1.0f,  1.0f   // 右上
+};
+
+// 纹理坐标（与顶点对应）
+static const GLfloat texCoords[] = {
+        0.0f, 0.0f,    // 左下
+        1.0f, 0.0f,    // 右下
+        0.0f, 1.0f,    // 左上
+        1.0f, 1.0f     // 右上
+};
+/********************FBO混合着色器******************************/
 #endif //MEDIA_GLSHADERTEXT_H

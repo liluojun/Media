@@ -18,6 +18,7 @@ long VideoRender::creatSurface(ANativeWindow *mWindow, jint w, jint h) {
     m->mEGLSurface = m->mEglEnvironment->createWindowSurface(m->mWindow);
     m->mGlDraw = new GlDraw();
     m->mGlDrawAi = new GlDrawAi();
+    m->mGlDrawFbo = new GlDrawFbo();
     m->handel = -1;
     m->h = h;
     m->w = w;

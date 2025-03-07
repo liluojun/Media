@@ -27,6 +27,7 @@ set(MEDIE_SOURCES
         GlRendering.cpp
         GlDraw.cpp
         GlDrawAi.cpp
+        GlDrawFbo.cpp
         GlThread.cpp
         Looper.cpp
         Utils.cpp

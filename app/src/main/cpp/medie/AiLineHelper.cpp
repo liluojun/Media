@@ -12,6 +12,6 @@ void AiLineHelper::creatAiLineData(AiLineData *mAiLineData) {
     mAiLineData->color[0] = 0.94f;
     mAiLineData->color[1] = 0.0f;
     mAiLineData->color[2] = 0.078f;
-    mAiLineData->color[3] = 1.0f;
+    mAiLineData->color[3] = 0.5f;
 
 }

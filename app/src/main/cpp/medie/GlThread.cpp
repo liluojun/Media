@@ -46,7 +46,13 @@ void GlThread::handleMessage(LooperMessage *msg) {
 
                     drawVideoFrames(mRender->m, (YuvData *) msg->obj, msg->arg1,
                                     msg->arg2);
-                   // drawAiFrames(mRender->m);
+
+                    bool result = drawAiFrames(mRender->m, msg->arg1,
+                                               msg->arg2);
+                    if (result)
+                        drawFboMix(mRender->m, msg->arg1,
+                                   msg->arg2);
+
                     mRender->m->mEglEnvironment->swapBuffers();
 
 
@@ -69,17 +75,25 @@ void GlThread::drawVideoFrames(RenderWindow *m, YuvData *data, int w, int h) {
     m->mGlDraw->drawYuv(yuvTextures, 0, 0, m->w, m->h);
 }
 
-void GlThread::drawAiFrames(RenderWindow *m) {
-    if (mAiFrame && mAiFrame->data) {
-        if (getTimestampMillis() - mAiFrame->timestamp > 30000) {
+bool GlThread::drawAiFrames(RenderWindow *m, int w, int h) {
+    if (mAiFrame != nullptr && mAiFrame->data != nullptr) {
+        if (getTimestampMillis() - mAiFrame->timestamp >10000) {
             delete (mAiFrame->data);
             mAiFrame->data = nullptr;
             mAiFrame->timestamp = 0;
+            return false;
         } else {
-            m->mGlDrawAi->drawAi(mAiFrame->data);
+            m->mGlDrawAi->drawAi(mAiFrame->data, w, h, m->w, m->h);
+            return true;
         }
 
+    } else{
+        return false;
     }
+}
+
+void GlThread::drawFboMix(RenderWindow *m, int w, int h) {
+    m->mGlDrawFbo->draw(m->mGlDrawAi->getFboTexture(), w, h,m->w, m->h);
 }
 
 bool GlThread::getIsSurfaceCreated() {
@@ -99,5 +113,7 @@ GlThread::~GlThread() {
         mAiFrame = nullptr;
     }
 }
+
+
 
 
