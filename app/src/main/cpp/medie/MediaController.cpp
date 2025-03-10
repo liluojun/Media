@@ -97,3 +97,59 @@ MediaController::~MediaController() {
     }
     pathPlayerMap.clear();
 }
+
+const char *MediaController::creatM3u8File(std::string *path, const char *tsList) {
+    cJSON *root = cJSON_Parse(tsList);
+    if (root == NULL) {
+        LOGE("creatM3u8File cJSON_Parse error");
+        return "";
+    }
+    int maxTime = 0;
+    int size = cJSON_GetArraySize(root);
+    if (size <= 0) {
+        LOGE("creatM3u8File ts size<=0");
+        return "";
+    }
+    std::vector<TsInfo> tslist;
+    for (int i = 0; i < size; ++i) {
+        cJSON *item = cJSON_GetArrayItem(root, i);
+        cJSON *time = cJSON_GetObjectItem(item, "time");
+        cJSON *url = cJSON_GetObjectItem(item, "url");
+        if (maxTime < time->valuedouble) {
+            maxTime = time->valuedouble;
+        }
+        std::string tsPath = *path;
+        tsPath.append("/").append(url->valuestring);
+        TsInfo tsInfo = {tsPath, time->valuedouble};
+        tslist.push_back(tsInfo);
+
+    }
+    cJSON_Delete(root);
+    std::string m3u8path;
+    if (path) {
+        m3u8path = *path;
+        m3u8path.append("/").append("creat.m3u8");
+    }
+    FILE *fp = fopen(m3u8path.c_str(), "w");
+    if (fp == NULL) {
+        LOGE("creatM3u8File openFile error");
+        return "";
+    }
+    // 写入m3u8头部信息
+    fprintf(fp, "#EXTM3U\n");
+    fprintf(fp, "#EXT-X-VERSION:3\n");
+    fprintf(fp, "#EXT-X-TARGETDURATION:%d\n", maxTime);
+    fprintf(fp, "#EXT-X-MEDIA-SEQUENCE:1\n");
+    for (int i = 0; i < tslist.size(); ++i) {
+        fprintf(fp, "#EXTINF:%.1f,\n", tslist[i].timestamp);
+        fprintf(fp, "%s.ts\n", tslist[i].url.c_str());
+    }
+
+    // 写入结束标志
+    fprintf(fp, "#EXT-X-ENDLIST\n");
+
+    // 关闭文件
+    fclose(fp);
+
+    return m3u8path.c_str();
+}

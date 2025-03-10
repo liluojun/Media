@@ -20,6 +20,7 @@ JNIEXPORT jint JNICALL changeSurfaceSize(JNIEnv *env, jobject thiz, jstring path
 
 JNIEXPORT jint JNICALL closeStream(JNIEnv *env, jobject thiz, jstring path);
 JNIEXPORT jint JNICALL init(JNIEnv *env, jobject thiz);
+JNIEXPORT jstring JNICALL creatM3u8File(JNIEnv *env, jobject thiz, jstring path, jstring tsInfo);
 #ifdef __cplusplus
 }
 #endif

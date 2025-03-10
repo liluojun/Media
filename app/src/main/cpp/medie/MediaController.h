@@ -12,8 +12,13 @@
 #include <map>
 #include "FrameCallback.h"
 #include "Utils.cpp"
+#include <stdio.h>
 
 #ifdef __cplusplus
+typedef struct TsInfo {
+    std::string url;
+    double timestamp;
+};
 /**
  * @brief 播放器核心上下文结构体
  *
@@ -113,11 +118,13 @@ typedef struct {
 
 extern "C" {
 #include <string>
-
+#include "cJSON.h"
 #endif
 class MediaController {
 public:
     int openStream(std::string *path);
+
+    const char* creatM3u8File(std::string *path, const char *tsList);
 
     int creatSurface(std::string *path, ANativeWindow *mWindow, int w, int h);
 

@@ -7,24 +7,26 @@
 #include "MediaController.h"
 #include "native_log.h"
 #include "JniUtils.cpp"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 static const char *lpClassPathName = "com/git/media/NativeMedia";
 static const JNINativeMethod nativeMethod[] = {
         // Java中的函数名                            函数签名信息                                         native的函数指针
-        {"openStream",        "(Ljava/lang/String;)I",                     (void *) (openStream)},
-        {"closeStream",       "(Ljava/lang/String;)I",                     (void *) (closeStream)},
-        {"creatSurface",      "(Ljava/lang/String;Ljava/lang/Object;II)I", (void *) (creatSurface)},
-        {"destorySurface",    "(Ljava/lang/String;)I",                     (void *) (destorySurface)},
-        {"changeSurfaceSize", "(Ljava/lang/String;II)I",                   (void *) (changeSurfaceSize)},
-        {"init",              "()I",                                       (void *) (init)},
+        {"openStream",        "(Ljava/lang/String;)I",                                    (void *) (openStream)},
+        {"closeStream",       "(Ljava/lang/String;)I",                                    (void *) (closeStream)},
+        {"creatSurface",      "(Ljava/lang/String;Ljava/lang/Object;II)I",                (void *) (creatSurface)},
+        {"destorySurface",    "(Ljava/lang/String;)I",                                    (void *) (destorySurface)},
+        {"changeSurfaceSize", "(Ljava/lang/String;II)I",                                  (void *) (changeSurfaceSize)},
+        {"init",              "()I",                                                      (void *) (init)},
+        {"creatM3u8File",     "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;", (void *) (creatM3u8File)},
 };
 MediaController *mediaController = NULL;
 // 类库加载时自动调用
-JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void* reserved) {
-    JNIEnv* env = nullptr;
-    if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
+JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
+    JNIEnv *env = nullptr;
+    if (vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) != JNI_OK) {
         return 0; // 修正错误返回值类型
     }
 
@@ -43,7 +45,6 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void* reserved) {
     env->DeleteLocalRef(jniClass); // 释放本地引用
     return JNI_VERSION_1_6;
 }
-
 
 
 JNIEXPORT jint JNICALL init(JNIEnv *env, jobject thiz) {
@@ -88,7 +89,17 @@ JNIEXPORT jint JNICALL destorySurface(JNIEnv *env, jobject thiz, jstring path) {
     }
     return result;
 }
+JNIEXPORT jstring JNICALL creatM3u8File(JNIEnv *env, jobject thiz, jstring path, jstring tsInfo) {
+    if (NULL != mediaController) {
+        std::string pStr = JStringToStdString(env, path);
+        const char *result = mediaController->creatM3u8File(&pStr, jstringTostr(env, tsInfo));
+        return env->NewStringUTF(result);
+    } else {
+        LOGE("mediaController is null");
+        return env->NewStringUTF("");
+    }
 
+}
 JNIEXPORT jint JNICALL changeSurfaceSize(JNIEnv *env, jobject thiz, jstring path, jint w, jint h) {
     jint result = 0;
     if (NULL != mediaController) {

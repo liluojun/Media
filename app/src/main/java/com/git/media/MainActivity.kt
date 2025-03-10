@@ -12,7 +12,9 @@ class MainActivity : AppCompatActivity() {
     //var nativeMedia: NativeMedia = NativeMedia()
     companion object {
         val TAG = "MainActivity"
-        val path ="http://kbs-dokdo.gscdn.com/dokdo_300/_definst_/dokdo_300.stream/playlist.m3u8"
+        val path = "http://kbs-dokdo.gscdn.com/dokdo_300/_definst_/dokdo_300.stream/playlist.m3u8"
+        var goodPath: String? = null;
+        val json="[{\"time\":15,\"url\":\"http://www.google.com\"},{\"time\":15.2,\"url\":\"http://www.baidu.com\"},{\"time\":22.2,\"url\":\"http://www.SoSo.com\"}]"
     }
 
     fun dip2px(context: Context, dpValue: Float): Int {
@@ -24,7 +26,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         val result = NativeMedia.init()
-        var tv = findViewById<TextureView>(R.id.tv)
+        goodPath = this.getExternalFilesDir(null)?.getAbsolutePath();
+        NativeMedia.creatM3u8File(goodPath as String, json);
+       /* var tv = findViewById<TextureView>(R.id.tv)
         tv.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
                 NativeMedia.creatSurface(path, Surface(surface), width, height)
@@ -47,7 +51,7 @@ class MainActivity : AppCompatActivity() {
             NativeMedia.openStream(path)
 
         }
-        Log.e(TAG, "result =$result")
+        Log.e(TAG, "result =$result")*/
     }
 
 }

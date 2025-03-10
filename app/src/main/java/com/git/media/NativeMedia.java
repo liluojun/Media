@@ -22,5 +22,6 @@ public class NativeMedia {
     public static native int destorySurface(String path);
 
     public static native int init();
+    public static native String creatM3u8File(String path,String tsInfoArray);
 
 }

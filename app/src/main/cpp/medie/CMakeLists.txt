@@ -20,6 +20,8 @@ set(MEDIE_SOURCES
         native.cpp
         JniUtils.cpp
         FFmpegEncodeStream.cpp
+        FFmpegStreamToMP4.cpp
+        cJSON.c
         AiLineHelper.cpp
         VideoRender.cpp
         EglEnvironment.cpp
