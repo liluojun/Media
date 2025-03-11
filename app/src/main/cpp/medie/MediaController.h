@@ -119,12 +119,15 @@ typedef struct {
 extern "C" {
 #include <string>
 #include "cJSON.h"
+#include "FFmpegStreamToMP4.h"
 #endif
 class MediaController {
 public:
     int openStream(std::string *path);
 
-    const char* creatM3u8File(std::string *path, const char *tsList);
+    const char *creatM3u8File(std::string *path, const char *tsList);
+
+    int m3u8ToMp4(const char *input_path, const char *output_path);
 
     int creatSurface(std::string *path, ANativeWindow *mWindow, int w, int h);
 

@@ -21,6 +21,7 @@ static const JNINativeMethod nativeMethod[] = {
         {"changeSurfaceSize", "(Ljava/lang/String;II)I",                                  (void *) (changeSurfaceSize)},
         {"init",              "()I",                                                      (void *) (init)},
         {"creatM3u8File",     "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;", (void *) (creatM3u8File)},
+        {"m3u8ToMp4",     "(Ljava/lang/String;Ljava/lang/String;)I", (void *) (m3u8ToMp4)},
 };
 MediaController *mediaController = NULL;
 // 类库加载时自动调用
@@ -97,6 +98,18 @@ JNIEXPORT jstring JNICALL creatM3u8File(JNIEnv *env, jobject thiz, jstring path,
     } else {
         LOGE("mediaController is null");
         return env->NewStringUTF("");
+    }
+
+}
+JNIEXPORT jint JNICALL m3u8ToMp4(JNIEnv *env, jobject thiz, jstring path, jstring outPath) {
+    if (NULL != mediaController) {
+
+        jint result = mediaController->m3u8ToMp4(jstringTostr(env, path),
+                                                 jstringTostr(env, outPath));
+        return result;
+    } else {
+        LOGE("mediaController is null");
+        return -1;
     }
 
 }

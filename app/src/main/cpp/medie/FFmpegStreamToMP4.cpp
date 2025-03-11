@@ -3,7 +3,11 @@
 //
 
 #include "FFmpegStreamToMP4.h"
+#define PROTOCOL_OPTION_KEY "protocol_whitelist"
+#define PROTOCOL_OPTION_VALUE "async,cache,crypto,file,http,https,rtmp,rtsp,ijkhttphook,ijkinject,ijklivehook,ijklongurl,ijksegment,ijktcphook,pipe,rtp,tcp,tls,udp,ijkurlhook,data"
 
+#define FORMAT_EXTENSION_KEY "allowed_extensions"
+#define FORMAT_EXTENSION_VALUE "ALL"
 
 #define SEI_UUID "6d1d9b05-42d5-40e3-ace3-f5d9b9f5b5b5"
 #define CLEANUP() \
@@ -28,6 +32,7 @@ struct AudioContext {
     AVCodecContext *dec_ctx = nullptr;
     AVCodecContext *enc_ctx = nullptr;
     AVFrame *frame = nullptr;
+    int input_stream_idx;  // 新增
     int output_stream_idx = -1;
 };
 
@@ -80,7 +85,7 @@ FFmpegStreamToMP4::streamToMP4(const char *input_path, const char *output_path, 
 
     // 打开输入文件
     if ((ret = avformat_open_input(&input_context, input_path, nullptr, &input_options))) {
-        LOGE("Open input failed: %s", av_err2str(ret));
+        LOGE("Open input failed: %s\n %s", av_err2str(ret),input_path);
         CallOnTransformFailed(listener, -2);
         CLEANUP();
         return;
@@ -95,7 +100,7 @@ FFmpegStreamToMP4::streamToMP4(const char *input_path, const char *output_path, 
     }
 
     // 创建输出上下文
-    if ((ret = avformat_alloc_output_context2(&output_context, nullptr, "mp4", output_path))) {
+    if ((ret = avformat_alloc_output_context2(&output_context, nullptr, nullptr, output_path))) {
         LOGE("Create output failed: %s", av_err2str(ret));
         CallOnTransformFailed(listener, -4);
         CLEANUP();
@@ -120,6 +125,12 @@ FFmpegStreamToMP4::streamToMP4(const char *input_path, const char *output_path, 
             video_stream_idx = i;
             if (in_codecpar->width <= 0 || in_codecpar->height <= 0) {
                 LOGE("Invalid video dimensions");
+                CallOnTransformFailed(listener, -5);
+                CLEANUP();
+                return;
+            }
+            if (!in_codecpar->extradata || in_codecpar->extradata_size <= 0) {
+                LOGE("Video extradata missing!");
                 CallOnTransformFailed(listener, -5);
                 CLEANUP();
                 return;
@@ -176,14 +187,26 @@ FFmpegStreamToMP4::streamToMP4(const char *input_path, const char *output_path, 
                                                    audio_ctx.dec_ctx->sample_rate,
                                                    0, nullptr);
             swr_init(audio_ctx.swr_ctx);
+            audio_ctx.input_stream_idx = i;  // 记录输入音频流索引
         }
 
         // 创建输出流
         AVStream *out_stream = avformat_new_stream(output_context, nullptr);
-        streams[i] = out_stream->index;
+        int index=out_stream->index;
+        streams[i] =index;
         avcodec_parameters_copy(out_stream->codecpar, in_codecpar);
+        out_stream->codecpar->codec_tag = 0;
     }
-
+    av_dump_format(output_context, 0, output_path, 1);
+    if (!(output_context->flags & AVFMT_NOFILE)) {
+        ret = avio_open(&output_context->pb, output_path, AVIO_FLAG_WRITE);
+        if (ret < 0) {
+            LOGE("av_dump_format: %s", av_err2str(ret));
+            CallOnTransformFailed(listener, -9);
+            CLEANUP();
+            return;
+        }
+    }
     // 打开输出文件
     if (!(output_context->oformat->flags & AVFMT_NOFILE)) {
         if ((ret = avio_open(&output_context->pb, output_path, AVIO_FLAG_WRITE))) {
@@ -220,7 +243,7 @@ FFmpegStreamToMP4::streamToMP4(const char *input_path, const char *output_path, 
             packet->dts -= base_pts;
         }
             // 音频流转码
-        else if (audio_ctx.dec_ctx && stream_idx == audio_ctx.dec_ctx->time_base.den) {
+        else if (audio_ctx.dec_ctx && stream_idx == audio_ctx.input_stream_idx) {
             // 解码
             if ((ret = avcodec_send_packet(audio_ctx.dec_ctx, packet))) {
                 LOGE("Send packet error: %s", av_err2str(ret));

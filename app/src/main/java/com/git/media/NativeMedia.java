@@ -2,7 +2,7 @@ package com.git.media;
 
 public class NativeMedia {
 
-    static{
+    static {
         System.loadLibrary("medie");
         System.loadLibrary("avcodec");
         System.loadLibrary("avfilter");
@@ -11,6 +11,7 @@ public class NativeMedia {
         System.loadLibrary("swresample");
         System.loadLibrary("swscale");
     }
+
     public static native int openStream(String path);
 
     public static native int closeStream(String path);
@@ -22,6 +23,9 @@ public class NativeMedia {
     public static native int destorySurface(String path);
 
     public static native int init();
-    public static native String creatM3u8File(String path,String tsInfoArray);
+
+    public static native String creatM3u8File(String path, String tsInfoArray);
+
+    public static native int m3u8ToMp4(String path, String outpath);
 
 }

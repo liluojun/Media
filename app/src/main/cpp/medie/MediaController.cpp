@@ -142,7 +142,7 @@ const char *MediaController::creatM3u8File(std::string *path, const char *tsList
     fprintf(fp, "#EXT-X-MEDIA-SEQUENCE:1\n");
     for (int i = 0; i < tslist.size(); ++i) {
         fprintf(fp, "#EXTINF:%.1f,\n", tslist[i].timestamp);
-        fprintf(fp, "%s.ts\n", tslist[i].url.c_str());
+        fprintf(fp, "%s\n", tslist[i].url.c_str());
     }
 
     // 写入结束标志
@@ -152,4 +152,11 @@ const char *MediaController::creatM3u8File(std::string *path, const char *tsList
     fclose(fp);
 
     return m3u8path.c_str();
+}
+
+int MediaController::m3u8ToMp4(const char *input_path, const char *output_path) {
+    FFmpegStreamToMP4 *ffmpegStreamToMP4 = new FFmpegStreamToMP4();
+    ffmpegStreamToMP4->streamToMP4(input_path, output_path,NULL);
+    delete (ffmpegStreamToMP4);
+    return 0;
 }

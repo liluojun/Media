@@ -8,6 +8,7 @@
 #include <jni.h>
 #include <vector>
 #include <string>
+
 #ifdef __cplusplus
 
 extern "C" {
@@ -21,9 +22,11 @@ extern "C" {
 #endif
 
 class FFmpegStreamToMP4 {
-    void streamToMP4(const char* input_path,
-                           const char* output_path,
-                           jobject listener);
+public:
+    void streamToMP4(const char *input_path,
+                     const char *output_path,
+                     jobject listener);
+
     void CallOnTransformFailed(jobject listener, int err);
 
     void CallOnTransformProgress(jobject listener, float progress);
