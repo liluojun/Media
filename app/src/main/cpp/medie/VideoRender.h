@@ -68,7 +68,7 @@ public:
     int changeSurfaceSize(int w, int h);
 
     RenderWindow *m;
-    bool isSurfaceCreated;
+    bool isSurfaceCreated= false;
 };
 
 #ifdef __cplusplus

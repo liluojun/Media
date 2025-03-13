@@ -114,7 +114,7 @@ void *decodeThread(void *arg) {
 
     ctx->init();
     pthread_create(&ctx->videoThread, nullptr, videoPlayThread, ctx);
-    pthread_create(&ctx->audioThread, nullptr, audioPlayThread, ctx);
+    //pthread_create(&ctx->audioThread, nullptr, audioPlayThread, ctx);
 
     while (!ctx->abortRequest) {
         if (av_read_frame(ctx->formatCtx, ctx->packet) < 0)
@@ -231,7 +231,7 @@ void *videoPlayThread(void *arg) {
 //        }
 
         if (ctx->frameCallback) {
-            //ctx->frameCallback->onFrameEncoded(frame);
+            ctx->frameCallback->onFrameEncoded(frame);
         }
         av_frame_free(&frame);
         lastPts = pts;
