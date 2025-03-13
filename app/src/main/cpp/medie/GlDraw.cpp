@@ -56,8 +56,6 @@ void GlDraw::drawYuv(GLuint *yuvTextures,
 //
 void GlDraw::drawYuv(GLuint *yuvTextures, float *texMatrix,
                      int viewportX, int viewportY, int viewportWidth, int viewportHeight) {
-
-
     prepareShader(YUV_FRAGMENT_SHADER_STRING, texMatrix);
     //Bind the textures.
     //后面渲染的时候，设置三成纹理
@@ -79,6 +77,7 @@ void GlDraw::drawRectangle(int x, int y, int width, int height) {
 }
 
 void GlDraw::prepareShader(std::string fragmentShader, float *texMatrix) {
+
     if (shaders.count(fragmentShader) > 0) {
         Shader shader = shaders[fragmentShader];
         shader.glShader.useProgram();

@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.Surface
 import android.view.TextureView
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
@@ -33,30 +34,35 @@ class MainActivity : AppCompatActivity() {
             NativeMedia.m3u8ToMp4(/*m3u8*/"/storage/emulated/0/Android/data/com.git.media/files/creat.m3u8",
                 "${(goodPath as String)}/test.mp4")
         }*/
-        var tv = findViewById<TextureView>(R.id.tv)
-         tv.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-             override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-                 NativeMedia.creatSurface(path, Surface(surface), width, height)
-             }
-
-             override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
-                 NativeMedia.changeSurfaceSize(path, width, height)
-             }
-
-             override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-                 NativeMedia.destorySurface(path)
-                 return true
-             }
-
-             override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
-
-             }
-         }
-         if (result == 0) {
-             NativeMedia.openStream(path)
-
-         }
+//        var tv = findViewById<TextureView>(R.id.tv)
+//         tv.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+//             override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+//                 NativeMedia.creatSurface(path, Surface(surface), width, height)
+//
+//             }
+//
+//             override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
+//                 NativeMedia.changeSurfaceSize(path, width, height)
+//             }
+//
+//             override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+//                 NativeMedia.destorySurface(path)
+//                 return true
+//             }
+//
+//             override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
+//
+//             }
+//         }
+        if (result == 0) {
+            NativeMedia.openStream(path)
+        }
          Log.e(TAG, "result =$result")
+        findViewById<TextView>(R.id.t).setOnClickListener { NativeMedia.closeStream(path) }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+
+    }
 }

@@ -6,6 +6,10 @@
 #define PLAYVIDEO_FFMPEGENCODESTREAM_H
 
 #ifdef __cplusplus
+#include <chrono>
+#include <thread>
+#include <queue>
+#include <pthread.h>
 
 extern "C" {
 #include "FrameCallback.h"
@@ -15,6 +19,15 @@ extern "C" {
 #include "libswresample/swresample.h"
 
 #endif
+struct AudioData {
+    uint8_t *data;
+    int size;
+    double pts;
+
+    AudioData() : data(nullptr), size(0), pts(0.0) {}
+
+    ~AudioData() { if (data) av_free(data); }
+};
 typedef struct DecodeContext {
     AVFormatContext *formatCtx = nullptr;
     AVCodecContext *videoCodecCtx = nullptr;
@@ -28,9 +41,29 @@ typedef struct DecodeContext {
     bool abortRequest = false;
     FrameCallback *frameCallback = nullptr;
     AudioCallback *audioCallback = nullptr;
+    std::queue<AVFrame *> videoQueue;
+    std::queue<AudioData> audioQueue;
+    pthread_mutex_t videoMutex;
+    pthread_mutex_t audioMutex;
+    pthread_cond_t videoCond;
+    pthread_cond_t audioCond;
+    double audioClock;
+    pthread_mutex_t audioClockMutex;
+    bool abortPlayback;
+    pthread_t videoThread;
+    pthread_t audioThread;
 
     ~DecodeContext() {
         cleanup();
+    }
+
+    void init() {
+        pthread_mutex_init(&videoMutex, nullptr);
+        pthread_mutex_init(&audioMutex, nullptr);
+        pthread_cond_init(&videoCond, nullptr);
+        pthread_cond_init(&audioCond, nullptr);
+        pthread_mutex_init(&audioClockMutex, nullptr);
+        abortPlayback = false;
     }
 
     void cleanup() {
@@ -58,22 +91,41 @@ typedef struct DecodeContext {
             avformat_close_input(&formatCtx);
             formatCtx = nullptr;
         }
+        pthread_mutex_destroy(&videoMutex);
+        pthread_mutex_destroy(&audioMutex);
+        pthread_cond_destroy(&videoCond);
+        pthread_cond_destroy(&audioCond);
+        pthread_mutex_destroy(&audioClockMutex);
+
+        while (!videoQueue.empty()) {
+            av_frame_free(&videoQueue.front());
+            videoQueue.pop();
+        }
+        while (!audioQueue.empty()) {
+            audioQueue.pop();
+        }
     }
 } DecodeContext;
 class FFmpegEncodeStream {
-private: DecodeContext *decodeCtx; pthread_t threadId ;
+private:
+    DecodeContext *decodeCtx;
+    pthread_t threadId;
 public:
     bool containsSEI(const uint8_t *data, int size);
 
     bool extractSEIData(const uint8_t *data, int size, uint8_t **seiData, int *seiSize);
+
     FFmpegEncodeStream();
-    bool openStream(const char *path);
-    void setFrameCallback(FrameCallback *callback);
-    void setAudioCallback(AudioCallback *callback);
-    void closeStream();
+
     ~FFmpegEncodeStream();
 
+    bool openStream(const char *path);
 
+    void setFrameCallback(FrameCallback *callback);
+
+    void setAudioCallback(AudioCallback *callback);
+
+    void closeStream();
 };
 
 #ifdef __cplusplus

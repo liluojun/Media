@@ -9,7 +9,6 @@ int MediaController::openStream(std::string *path) {
     if (it == pathPlayerMap.end()) {
         Player *player = new Player();
         player->mFFmpegEncodeStream = new FFmpegEncodeStream();
-
         player->mGlThread = new GlThread();
         pathPlayerMap[*path] = player;
         player->mFFmpegEncodeStream->openStream(stringToChar(*path).data());
@@ -75,9 +74,15 @@ int MediaController::closeStream(std::string *path) {
     auto it = pathPlayerMap.find(*path);
     if (it != pathPlayerMap.end()) {
         if (it->second != nullptr) {
+            LOGE("11111")
+            it->second->mFFmpegEncodeStream->closeStream();
+            LOGE("111112")
             delete (it->second->mFFmpegEncodeStream);
+            LOGE("111113")
             it->second->mGlThread->quit();
+            LOGE("1111144")
             delete (it->second->mGlThread);
+            LOGE("111115")
         } else {
             result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
             LOGE("Player is null on changeSurfaceSize  path %s", path);

@@ -152,7 +152,7 @@ void Looper::loop() {
             delete msg;
             return;
         }
-        //LOGD("processing msg %d", msg->what);
+        LOGD("processing msg %d", msg->what);
         handleMessage(msg);
         delete msg;
     }

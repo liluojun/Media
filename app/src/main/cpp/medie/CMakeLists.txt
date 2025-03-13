@@ -16,6 +16,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # 根据当前 ABI 动态获取预编译库路径
 set(LOCAL_PATH ${CMAKE_CURRENT_SOURCE_DIR})  # 等效于 $(call my-dir)
 set(YUV_LIB_DIR "${LOCAL_PATH}/ffmpeg/${ANDROID_ABI}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../jniLibs/${ANDROID_ABI})
+
 set(MEDIE_SOURCES
         native.cpp
         JniUtils.cpp
@@ -45,6 +47,7 @@ add_library(avfilter SHARED IMPORTED)
 set_target_properties(avfilter PROPERTIES
         IMPORTED_LOCATION "${YUV_LIB_DIR}/lib/libavfilter.so"
 )
+
 add_library(avformat SHARED IMPORTED)
 set_target_properties(avformat PROPERTIES
         IMPORTED_LOCATION "${YUV_LIB_DIR}/lib/libavformat.so"
@@ -76,4 +79,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
         log
         GLESv2
         EGL
+
 )

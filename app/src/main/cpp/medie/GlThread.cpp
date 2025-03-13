@@ -13,6 +13,7 @@ GlThread::GlThread() {
     mAiFrame->data = new AiLineData();
     mAiLineHelper->creatAiLineData(mAiFrame->data);
     mAiFrame->timestamp = getTimestampMillis();
+
 }
 
 
@@ -25,39 +26,41 @@ void GlThread::handleMessage(LooperMessage *msg) {
             if (mRender) {
                 mRender->creatSurface((ANativeWindow *) msg->obj, msg->arg1, msg->arg2);
             }
+            LOGD("kMsgSurfaceCreated");
             break;
 
         case kMsgSurfaceChanged:
             if (mRender) {
                 mRender->changeSurfaceSize(msg->arg1, msg->arg2);
             }
+            LOGD("kMsgSurfaceChanged");
             break;
 
         case kMsgSurfaceDestroyed:
             if (mRender) {
                 mRender->destorySurface();
             }
+            LOGD("kMsgSurfaceDestroyed");
             break;
         case kMsgYuvData:
+            LOGD("kMsgYuvData");
             if (mRender) {
-                if (mRender->m != NULL) {
+                if (mRender->m != NULL && mRender->isSurfaceCreated) {
                     glClearColor(1.0, 1.0, 1.0, 1.0);
                     glClear(GL_STENCIL_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
                     drawVideoFrames(mRender->m, (YuvData *) msg->obj, msg->arg1,
                                     msg->arg2);
-
                     bool result = drawAiFrames(mRender->m, msg->arg1,
                                                msg->arg2);
                     if (result)
                         drawFboMix(mRender->m, msg->arg1,
                                    msg->arg2);
-
                     mRender->m->mEglEnvironment->swapBuffers();
 
-
+                    delete (msg->obj);
                 }
             }
+            LOGD("kMsgYuvData");
             break;
         case kMsgAiFrame: {
             if (mAiFrame) {
@@ -71,13 +74,12 @@ void GlThread::handleMessage(LooperMessage *msg) {
 void GlThread::drawVideoFrames(RenderWindow *m, YuvData *data, int w, int h) {
     GLuint yuvTextures[3];
     m->mGlDraw->perparDrawYuv(w, h, data, yuvTextures);
-    delete (data);
     m->mGlDraw->drawYuv(yuvTextures, 0, 0, m->w, m->h);
 }
 
 bool GlThread::drawAiFrames(RenderWindow *m, int w, int h) {
     if (mAiFrame != nullptr && mAiFrame->data != nullptr) {
-        if (getTimestampMillis() - mAiFrame->timestamp >10000) {
+        if (getTimestampMillis() - mAiFrame->timestamp > 10000) {
             delete (mAiFrame->data);
             mAiFrame->data = nullptr;
             mAiFrame->timestamp = 0;
@@ -87,13 +89,13 @@ bool GlThread::drawAiFrames(RenderWindow *m, int w, int h) {
             return true;
         }
 
-    } else{
+    } else {
         return false;
     }
 }
 
 void GlThread::drawFboMix(RenderWindow *m, int w, int h) {
-    m->mGlDrawFbo->draw(m->mGlDrawAi->getFboTexture(), w, h,m->w, m->h);
+    m->mGlDrawFbo->draw(m->mGlDrawAi->getFboTexture(), w, h, m->w, m->h);
 }
 
 bool GlThread::getIsSurfaceCreated() {
