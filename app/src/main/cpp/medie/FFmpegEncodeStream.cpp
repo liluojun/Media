@@ -114,7 +114,7 @@ void *decodeThread(void *arg) {
 
     ctx->init();
     pthread_create(&ctx->videoThread, nullptr, videoPlayThread, ctx);
-    //pthread_create(&ctx->audioThread, nullptr, audioPlayThread, ctx);
+    pthread_create(&ctx->audioThread, nullptr, audioPlayThread, ctx);
 
     while (!ctx->abortRequest) {
         if (av_read_frame(ctx->formatCtx, ctx->packet) < 0)
@@ -136,7 +136,7 @@ void *decodeThread(void *arg) {
                     uint8_t *seiData = nullptr;
                     int seiSize = 0;
                     if (extractSEIData(ctx->packet->data, ctx->packet->size, &seiData, &seiSize)) {
-                        LOGD("Got SEI data size: %d", seiSize)
+                        LOGE("Got SEI data size: %d", seiSize)
                         free(seiData);
                     }
                 }
@@ -185,7 +185,6 @@ void *decodeThread(void *arg) {
                 }
             }
         }
-
         av_packet_unref(ctx->packet);
     }
     // 等待播放线程结束
@@ -226,10 +225,11 @@ void *videoPlayThread(void *arg) {
         pthread_mutex_unlock(&ctx->audioClockMutex);
 
         double delay = pts - audioTime;
-//        if (delay > 0) {
-//            std::this_thread::sleep_for(std::chrono::duration<double>(delay));
-//        }
-
+        LOGE("delay:%f", delay)
+        if (delay > 0) {
+            std::this_thread::sleep_for(std::chrono::duration<double>(delay));
+        }
+        LOGE("delay2:%f", delay)
         if (ctx->frameCallback) {
             ctx->frameCallback->onFrameEncoded(frame);
         }
@@ -243,8 +243,8 @@ void *videoPlayThread(void *arg) {
 void *audioPlayThread(void *arg) {
     DecodeContext *ctx = (DecodeContext *) arg;
     double currentTime = 0.0;
-
     while (!ctx->abortPlayback) {
+
         pthread_mutex_lock(&ctx->audioMutex);
         while (ctx->audioQueue.empty() && !ctx->abortPlayback) {
             pthread_cond_wait(&ctx->audioCond, &ctx->audioMutex);
@@ -254,22 +254,21 @@ void *audioPlayThread(void *arg) {
             pthread_mutex_unlock(&ctx->audioMutex);
             break;
         }
-
         AudioData audioData = ctx->audioQueue.front();
         ctx->audioQueue.pop();
         pthread_mutex_unlock(&ctx->audioMutex);
-
         // 更新音频时钟
         int sampleRate = 44100;
         int sampleCount = audioData.size / (2 * sizeof(int16_t));
         double duration = static_cast<double>(sampleCount) / sampleRate;
-
         pthread_mutex_lock(&ctx->audioClockMutex);
         ctx->audioClock = audioData.pts + duration;
         pthread_mutex_unlock(&ctx->audioClockMutex);
-
         if (ctx->audioCallback) {
             ctx->audioCallback->onAudioEncoded(audioData.data, audioData.size);
+        }
+        if (audioData.data) {
+            av_free(audioData.data);
         }
     }
     return nullptr;
@@ -313,5 +312,6 @@ void FFmpegEncodeStream::closeStream() {
         pthread_join(threadId, nullptr);
         delete decodeCtx;
         decodeCtx = nullptr;
+
     }
 }

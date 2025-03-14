@@ -26,7 +26,7 @@ struct AudioData {
 
     AudioData() : data(nullptr), size(0), pts(0.0) {}
 
-    ~AudioData() { if (data) av_free(data); }
+    //~AudioData() { if (data) av_free(data); }
 };
 typedef struct DecodeContext {
     AVFormatContext *formatCtx = nullptr;
@@ -47,9 +47,9 @@ typedef struct DecodeContext {
     pthread_mutex_t audioMutex;
     pthread_cond_t videoCond;
     pthread_cond_t audioCond;
-    double audioClock;
+    double audioClock=0.00;
     pthread_mutex_t audioClockMutex;
-    bool abortPlayback;
+    bool abortPlayback= false;
     pthread_t videoThread;
     pthread_t audioThread;
 
@@ -67,6 +67,7 @@ typedef struct DecodeContext {
     }
 
     void cleanup() {
+        LOGE("cleanup")
         if (swrCtx) {
             swr_free(&swrCtx);
             swrCtx = nullptr;
