@@ -48,30 +48,28 @@ typedef struct DecodeContext {
     pthread_cond_t videoCond;
     pthread_cond_t audioCond;
     int videoQueueMaxSize = 15;      // 视频队列最大长度
-    int audioQueueMaxSize = 30;      // 音频队列最大长度
+    int audioQueueMaxSize = 60;      // 音频队列最大长度
     pthread_cond_t videoCondNotFull; // 视频队列未满条件
     pthread_cond_t audioCondNotFull; // 音频队列未满条件
     double audioClock=0.00;
+    double videoClock=0.00;
     pthread_mutex_t audioClockMutex;
     bool abortPlayback= false;
     pthread_t videoThread;
     pthread_t audioThread;
     double frameRate; // 新增视频帧率
     int64_t frameDuration; // 帧持续时间(微秒)
-    int dynamicVideoQueueMax = 10;
-    int baseVideoQueueSize = 5;
 
-    void adjustBuffer() {
-        static int counter = 0;
-        if (++counter % 30 != 0) return; // 每30帧调整一次
-
-        double usage = (double)videoQueue.size() / dynamicVideoQueueMax;
-        if (usage > 0.8) {
-            dynamicVideoQueueMax = std::min(20, dynamicVideoQueueMax + 2);
-        } else if (usage < 0.3) {
-            dynamicVideoQueueMax = std::max(baseVideoQueueSize, dynamicVideoQueueMax - 1);
-        }
-    }
+    /************音视频同步字段******************/
+    pthread_mutex_t audioPendingMutex;
+    double pendingAudioDuration = 0.0;
+    pthread_mutex_t videoPendingMutex;
+    double pendingVideoDuration = 0.0;
+    /******************************/
+    double frameAdjustFactor = 1.0;    // 帧间隔动态调整系数（1.0表示正常速度）
+    int64_t lastKeyFramePts = -1;      // 最后一个关键帧的PTS
+    pthread_mutex_t keyframeMutex;     // 关键帧PTS的互斥锁
+    double maxChaseSpeed = 2.0;        // 最大追赶倍速（可配置）
     void calculateFrameRate(AVStream* stream) {
         this->frameRate = av_q2d(stream->avg_frame_rate);
         this->frameDuration = (frameRate > 0) ?
