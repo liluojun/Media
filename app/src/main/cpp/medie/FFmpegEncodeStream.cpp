@@ -80,6 +80,9 @@ void *decodeThread(void *arg) {
         ctx->videoCodecCtx = avcodec_alloc_context3(videoCodec);
         avcodec_parameters_to_context(ctx->videoCodecCtx,
                                       ctx->formatCtx->streams[ctx->videoStreamIndex]->codecpar);
+        AVStream *videoStream = ctx->formatCtx->streams[ctx->videoStreamIndex];
+        ctx->calculateFrameRate(videoStream);
+        LOGI("Video frame rate: %.2f fps", ctx->frameRate);
         if (avcodec_open2(ctx->videoCodecCtx, videoCodec, nullptr) < 0) {
             LOGE("Failed to open video codec");
             delete ctx;
@@ -119,7 +122,6 @@ void *decodeThread(void *arg) {
     while (!ctx->abortRequest) {
         if (av_read_frame(ctx->formatCtx, ctx->packet) < 0)
             break;
-
         if (ctx->packet->stream_index == ctx->videoStreamIndex) {
             /* 自动sei帧解析// SEI检测逻辑
              for (int i = 0; i < ctx->packet->side_data_elems; i++) {
@@ -141,12 +143,15 @@ void *decodeThread(void *arg) {
                     }
                 }
             }
-            LOGE("Processing packet: data=%p, size=%d", ctx->packet->data, ctx->packet->size);
+
             // 处理视频帧
             if (avcodec_send_packet(ctx->videoCodecCtx, ctx->packet) == 0) {
                 while (avcodec_receive_frame(ctx->videoCodecCtx, ctx->frame) == 0) {
                     AVFrame *frameCopy = av_frame_clone(ctx->frame);
                     pthread_mutex_lock(&ctx->videoMutex);
+                    while (ctx->videoQueue.size() >= ctx->videoQueueMaxSize && !ctx->abortRequest) {
+                        pthread_cond_wait(&ctx->videoCondNotFull, &ctx->videoMutex);
+                    }
                     ctx->videoQueue.push(frameCopy);
                     pthread_cond_signal(&ctx->videoCond);
                     pthread_mutex_unlock(&ctx->videoMutex);
@@ -179,6 +184,10 @@ void *decodeThread(void *arg) {
                                     av_q2d(ctx->formatCtx->streams[ctx->audioStreamIndex]->time_base);
 
                     pthread_mutex_lock(&ctx->audioMutex);
+                    // 等待直到队列有空位
+                    while (ctx->audioQueue.size() >= ctx->audioQueueMaxSize && !ctx->abortRequest) {
+                        pthread_cond_wait(&ctx->audioCondNotFull, &ctx->audioMutex);
+                    }
                     ctx->audioQueue.push(audioData);
                     pthread_cond_signal(&ctx->audioCond);
                     pthread_mutex_unlock(&ctx->audioMutex);
@@ -186,7 +195,9 @@ void *decodeThread(void *arg) {
             }
         }
         av_packet_unref(ctx->packet);
+        ctx->adjustBuffer();
     }
+    LOGE("END")
     // 等待播放线程结束
     ctx->abortPlayback = true;
     pthread_cond_broadcast(&ctx->videoCond);
@@ -202,7 +213,12 @@ void *decodeThread(void *arg) {
 // 新增视频播放线程
 void *videoPlayThread(void *arg) {
     DecodeContext *ctx = (DecodeContext *) arg;
+    using Clock = std::chrono::high_resolution_clock;
+
+    Clock::time_point lastRenderTime = Clock::now();
+    double frameInterval = 1.0 / ctx->frameRate; // 理论帧间隔
     double lastPts = -1.0;
+    const double MAX_DESYNC = 0.5; // 最大允许不同步500ms
     while (!ctx->abortPlayback) {
         pthread_mutex_lock(&ctx->videoMutex);
         while (ctx->videoQueue.empty() && !ctx->abortPlayback) {
@@ -212,9 +228,11 @@ void *videoPlayThread(void *arg) {
             pthread_mutex_unlock(&ctx->videoMutex);
             break;
         }
-
         AVFrame *frame = ctx->videoQueue.front();
         ctx->videoQueue.pop();
+
+        // 通知解码线程队列有空位
+        pthread_cond_signal(&ctx->videoCondNotFull);
         pthread_mutex_unlock(&ctx->videoMutex);
 
         double pts = frame->pts * av_q2d(ctx->formatCtx->streams[ctx->videoStreamIndex]->time_base);
@@ -222,19 +240,43 @@ void *videoPlayThread(void *arg) {
 
         pthread_mutex_lock(&ctx->audioClockMutex);
         double audioTime = ctx->audioClock;
+        LOGE("audioTime:%f, pts:%f, syncDiff:%f", audioTime, pts, pts - audioTime)
         pthread_mutex_unlock(&ctx->audioClockMutex);
 
-        double delay = pts - audioTime;
-        LOGE("delay:%f", delay)
-        if (delay > 0) {
-            std::this_thread::sleep_for(std::chrono::duration<double>(delay));
+        // 计算精确渲染时间
+        auto now = Clock::now();
+        double elapsed = std::chrono::duration<double>(now - lastRenderTime).count();
+        double remainingTime = frameInterval - elapsed;
+
+        // 动态调整策略
+        if (remainingTime > 0) {
+            // 精确等待剩余时间
+            std::this_thread::sleep_for(
+                    std::chrono::duration<double>(remainingTime * 0.9) // 90%防止超时
+            );
+        } else if (remainingTime < -0.5 * frameInterval) {
+            // 连续3帧超时触发丢帧
+            static int dropCounter = 0;
+            if (++dropCounter >= 3) {
+                av_frame_free(&frame);
+                dropCounter = 0;
+                continue;
+            }
         }
-        LOGE("delay2:%f", delay)
+
+        // 执行渲染
         if (ctx->frameCallback) {
+            auto renderStart = Clock::now();
             ctx->frameCallback->onFrameEncoded(frame);
+            auto renderDuration = Clock::now() - renderStart;
+
+            // 补偿渲染耗时
+            lastRenderTime = Clock::now() + renderDuration;
+        } else {
+            lastRenderTime = Clock::now();
         }
+
         av_frame_free(&frame);
-        lastPts = pts;
     }
     return nullptr;
 }
@@ -254,15 +296,20 @@ void *audioPlayThread(void *arg) {
             pthread_mutex_unlock(&ctx->audioMutex);
             break;
         }
+
         AudioData audioData = ctx->audioQueue.front();
         ctx->audioQueue.pop();
+
+        // 通知解码线程队列有空位
+        pthread_cond_signal(&ctx->audioCondNotFull);
         pthread_mutex_unlock(&ctx->audioMutex);
         // 更新音频时钟
         int sampleRate = 44100;
         int sampleCount = audioData.size / (2 * sizeof(int16_t));
         double duration = static_cast<double>(sampleCount) / sampleRate;
         pthread_mutex_lock(&ctx->audioClockMutex);
-        ctx->audioClock = audioData.pts + duration;
+        ctx->audioClock = audioData.pts +
+                          (double)duration / ctx->audioCodecCtx->sample_rate; // 精确到已播放样本数
         pthread_mutex_unlock(&ctx->audioClockMutex);
         if (ctx->audioCallback) {
             ctx->audioCallback->onAudioEncoded(audioData.data, audioData.size);
@@ -309,6 +356,10 @@ void FFmpegEncodeStream::closeStream() {
     if (decodeCtx) {
         decodeCtx->abortRequest = true;
         decodeCtx->abortPlayback = true;
+        pthread_cond_broadcast(&decodeCtx->videoCondNotFull);
+        pthread_cond_broadcast(&decodeCtx->audioCondNotFull);
+        pthread_cond_broadcast(&decodeCtx->videoCond);
+        pthread_cond_broadcast(&decodeCtx->audioCond);
         pthread_join(threadId, nullptr);
         delete decodeCtx;
         decodeCtx = nullptr;

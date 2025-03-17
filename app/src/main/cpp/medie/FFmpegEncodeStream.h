@@ -47,12 +47,36 @@ typedef struct DecodeContext {
     pthread_mutex_t audioMutex;
     pthread_cond_t videoCond;
     pthread_cond_t audioCond;
+    int videoQueueMaxSize = 15;      // 视频队列最大长度
+    int audioQueueMaxSize = 30;      // 音频队列最大长度
+    pthread_cond_t videoCondNotFull; // 视频队列未满条件
+    pthread_cond_t audioCondNotFull; // 音频队列未满条件
     double audioClock=0.00;
     pthread_mutex_t audioClockMutex;
     bool abortPlayback= false;
     pthread_t videoThread;
     pthread_t audioThread;
+    double frameRate; // 新增视频帧率
+    int64_t frameDuration; // 帧持续时间(微秒)
+    int dynamicVideoQueueMax = 10;
+    int baseVideoQueueSize = 5;
 
+    void adjustBuffer() {
+        static int counter = 0;
+        if (++counter % 30 != 0) return; // 每30帧调整一次
+
+        double usage = (double)videoQueue.size() / dynamicVideoQueueMax;
+        if (usage > 0.8) {
+            dynamicVideoQueueMax = std::min(20, dynamicVideoQueueMax + 2);
+        } else if (usage < 0.3) {
+            dynamicVideoQueueMax = std::max(baseVideoQueueSize, dynamicVideoQueueMax - 1);
+        }
+    }
+    void calculateFrameRate(AVStream* stream) {
+        this->frameRate = av_q2d(stream->avg_frame_rate);
+        this->frameDuration = (frameRate > 0) ?
+                              static_cast<int64_t>(1000000 / frameRate) : 40000; // 默认25fps
+    }
     ~DecodeContext() {
         cleanup();
     }
@@ -63,6 +87,8 @@ typedef struct DecodeContext {
         pthread_cond_init(&videoCond, nullptr);
         pthread_cond_init(&audioCond, nullptr);
         pthread_mutex_init(&audioClockMutex, nullptr);
+        pthread_cond_init(&videoCondNotFull, nullptr);
+        pthread_cond_init(&audioCondNotFull, nullptr);
         abortPlayback = false;
     }
 
@@ -97,7 +123,8 @@ typedef struct DecodeContext {
         pthread_cond_destroy(&videoCond);
         pthread_cond_destroy(&audioCond);
         pthread_mutex_destroy(&audioClockMutex);
-
+        pthread_cond_destroy(&videoCondNotFull);
+        pthread_cond_destroy(&audioCondNotFull);
         while (!videoQueue.empty()) {
             av_frame_free(&videoQueue.front());
             videoQueue.pop();
