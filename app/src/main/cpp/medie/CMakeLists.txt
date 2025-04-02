@@ -11,12 +11,13 @@ cmake_minimum_required(VERSION 3.22.1)
 # with ${CMAKE_PROJECT_NAME} (both CMake variables are in-sync within the top level
 # build script scope).
 project("medie")
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # 根据当前 ABI 动态获取预编译库路径
 set(LOCAL_PATH ${CMAKE_CURRENT_SOURCE_DIR})  # 等效于 $(call my-dir)
 set(YUV_LIB_DIR "${LOCAL_PATH}/ffmpeg/${ANDROID_ABI}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../jniLibs/${ANDROID_ABI})
+set(OBOE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../oboe)
 
 set(MEDIE_SOURCES
         native.cpp
@@ -36,8 +37,10 @@ set(MEDIE_SOURCES
         Looper.cpp
         Utils.cpp
         MediaController.cpp
+        AudioPlayer.cpp
 
 )
+add_subdirectory(${OBOE_DIR} ./oboe)
 # 添加预编译的 so
 add_library(avcodec SHARED IMPORTED)
 set_target_properties(avcodec PROPERTIES
@@ -64,6 +67,7 @@ add_library(swscale SHARED IMPORTED)
 set_target_properties(swscale PROPERTIES
         IMPORTED_LOCATION "${YUV_LIB_DIR}/lib/libswscale.so"
 )
+include_directories("${OBOE_DIR}/include")
 include_directories("${YUV_LIB_DIR}/include")
 add_library(${PROJECT_NAME} SHARED ${MEDIE_SOURCES})
 
@@ -79,5 +83,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
         log
         GLESv2
         EGL
+        oboe
 
 )
