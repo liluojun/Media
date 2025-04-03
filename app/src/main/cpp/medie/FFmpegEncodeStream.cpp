@@ -1,9 +1,16 @@
 #include "FFmpegEncodeStream.h"
 #include "Utils.cpp"
-
+#include <chrono>
+#include <ctime>
 
 #define MAX_AUDIO_FRAME_SIZE 44100
 #define usleep(useconds) (::usleep(static_cast<useconds_t>(useconds)))
+// 获取当前时间戳 (毫秒级)
+auto now = std::chrono::system_clock::now();
+auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()).count();
+std::ofstream file("storage/emulated/0/Android/data/com.git.media/files/audio.pcm",
+                   std::ios::binary);
 
 // 新增函数声明
 void *videoPlayThread(void *arg);
@@ -49,7 +56,7 @@ bool extractSEIData(const uint8_t *data, int size, uint8_t **seiData, int *seiSi
 void *decodeThread(void *arg) {
     DecodeContext *ctx = static_cast<DecodeContext *>(arg);
     AVCodec *videoCodec = nullptr, *audioCodec = nullptr;
-
+    SwrContext *swr_ctx = nullptr;//音频重采样
     // 打开输入文件
     if (avformat_open_input(&ctx->formatCtx, ctx->filePath, nullptr, nullptr) != 0) {
         LOGE("Failed to open input file");
@@ -100,12 +107,29 @@ void *decodeThread(void *arg) {
             delete ctx;
             return nullptr;
         }
+        swr_ctx = swr_alloc_set_opts(
+                nullptr,
+                av_get_default_channel_layout(ctx->audioCodecCtx->channels),
+                AV_SAMPLE_FMT_FLT, // 目标格式：S16交错
+                ctx->audioCodecCtx->sample_rate,
+                av_get_default_channel_layout(ctx->audioCodecCtx->channels),
+                (AVSampleFormat) ctx->audioCodecCtx->sample_fmt,
+                ctx->audioCodecCtx->sample_rate,
+                0, nullptr
+        );
+        if (swr_init(swr_ctx) < 0) {
+            LOGE("Failed to initialize resampler");
+            delete ctx;
+            return nullptr;
+        }
 
     }
 
     ctx->frame = av_frame_alloc();
     ctx->packet = av_packet_alloc();
-
+    LOGE("audioCodecCtx  ctx->audioCodecCtx->channels=%d,ctx->frame->nb_samples=%d",
+         ctx->audioCodecCtx->channels,  // 原始声道数
+         ctx->frame->nb_samples);
     ctx->init();
     pthread_create(&ctx->videoThread, nullptr, videoPlayThread, ctx);
     pthread_create(&ctx->audioThread, nullptr, audioPlayThread, ctx);
@@ -166,7 +190,7 @@ void *decodeThread(void *arg) {
                     while (ctx->videoQueue.size() >= ctx->videoQueueMaxSize && !ctx->abortRequest) {
                         pthread_cond_wait(&ctx->videoCondNotFull, &ctx->videoMutex);
                     }
-                   // LOGE("video %f " , frameCopy->pts * av_q2d(ctx->formatCtx->streams[ctx->videoStreamIndex]->time_base));
+                    // LOGE("video %f " , frameCopy->pts * av_q2d(ctx->formatCtx->streams[ctx->videoStreamIndex]->time_base));
                     ctx->videoQueue.push(frameCopy);
                     //LOGE("videoQueue size: %d", ctx->videoQueue.size())
                     pthread_cond_signal(&ctx->videoCond);
@@ -182,7 +206,7 @@ void *decodeThread(void *arg) {
             pthread_mutex_lock(&ctx->audioPendingMutex);
             if (ctx->pendingAudioDuration + duration > 1.0) {
                 pthread_mutex_unlock(&ctx->audioPendingMutex);
-
+                LOGE("音频帧超过阈值")
                 av_packet_unref(ctx->packet);
                 continue; // 跳过超过阈值的音频帧
             }
@@ -191,43 +215,65 @@ void *decodeThread(void *arg) {
             // 处理音频帧
             if (avcodec_send_packet(ctx->audioCodecCtx, ctx->packet) == 0) {
                 while (avcodec_receive_frame(ctx->audioCodecCtx, ctx->frame) == 0) {
-
-                    // 获取原始音频数据参数
-                    int bufSize = av_samples_get_buffer_size(
-                            nullptr,
-                            ctx->audioCodecCtx->channels,  // 原始声道数
-                            ctx->frame->nb_samples,
-                            ctx->audioCodecCtx->sample_fmt, // 原始格式
-                            1
+                    int64_t delay = swr_get_delay(swr_ctx , ctx->frame->sample_rate);
+                    // 预分配输出缓冲区
+                    int max_out_samples = av_rescale_rnd(
+                            ctx->frame->nb_samples+delay,
+                            ctx->audioCodecCtx->sample_rate,
+                            ctx->audioCodecCtx->sample_rate,
+                            AV_ROUND_UP
                     );
+                    uint8_t *output_buffer = nullptr;
+                    int out_linesize;
+                    av_samples_alloc(&output_buffer, &out_linesize,
+                                     ctx->audioCodecCtx->channels,
+                                     max_out_samples,
+                                     AV_SAMPLE_FMT_FLT, 0);
 
-                    AudioData audioData;
-                    audioData.data = (uint8_t *) av_malloc(bufSize);
-                    memcpy(audioData.data, ctx->frame->data[0], bufSize);
-                    audioData.size = bufSize;
-                    audioData.pts = ctx->frame->pts *
-                                    av_q2d(ctx->formatCtx->streams[ctx->audioStreamIndex]->time_base);
-                    pthread_mutex_lock(&ctx->audioMutex);
-                    // 等待直到队列有空位
-                    while (ctx->audioQueue.size() >= ctx->audioQueueMaxSize && !ctx->abortRequest) {
-                        pthread_cond_wait(&ctx->audioCondNotFull, &ctx->audioMutex);
+                    int out_samples = swr_convert(
+                            swr_ctx,
+                            &output_buffer,
+                            ctx->frame->nb_samples,
+                            (const uint8_t **) ctx->frame->data,
+                            ctx->frame->nb_samples
+                    );
+                    if (out_samples > 0) {
+                        int bufSize = av_samples_get_buffer_size(
+                                nullptr, ctx->audioCodecCtx->channels,
+                                out_samples, AV_SAMPLE_FMT_FLT, 0
+                        );
+                        file.write(reinterpret_cast<const char*>(output_buffer), bufSize);
+                        AudioData audioData;
+                        audioData.data = (uint8_t *) av_malloc(bufSize);
+                        memcpy(audioData.data, output_buffer, bufSize);
+                        audioData.size = bufSize;
+                        audioData.pts = ctx->frame->pts *
+                                        av_q2d(ctx->formatCtx->streams[ctx->audioStreamIndex]->time_base);
+                        pthread_mutex_lock(&ctx->audioMutex);
+                        // 等待直到队列有空位
+                        while (ctx->audioQueue.size() >= ctx->audioQueueMaxSize &&
+                               !ctx->abortRequest) {
+                            pthread_cond_wait(&ctx->audioCondNotFull, &ctx->audioMutex);
+                        }
+                        ctx->audioQueue.push(audioData);
+                        pthread_cond_signal(&ctx->audioCond);
+                        pthread_mutex_unlock(&ctx->audioMutex);
                     }
-                    ctx->audioQueue.push(audioData);
-                    pthread_cond_signal(&ctx->audioCond);
-                    pthread_mutex_unlock(&ctx->audioMutex);
                 }
             }
         }
         av_packet_unref(ctx->packet);
     }
     LOGE("END")
+    file.close();
     // 等待播放线程结束
-    ctx->abortPlayback = true;
-    pthread_cond_broadcast(&ctx->videoCond);
-    pthread_cond_broadcast(&ctx->audioCond);
-    pthread_join(ctx->videoThread, nullptr);
-    pthread_join(ctx->audioThread, nullptr);
-    delete ctx;
+//    ctx->abortPlayback = true;
+//    pthread_cond_broadcast(&ctx->videoCond);
+//    pthread_cond_broadcast(&ctx->audioCond);
+//    pthread_join(ctx->videoThread, nullptr);
+//    pthread_join(ctx->audioThread, nullptr);
+//    swr_free(&swr_ctx);
+//    delete ctx;
     return nullptr;
 }
 
@@ -255,13 +301,13 @@ void *videoPlayThread(void *arg) {
         pthread_mutex_unlock(&ctx->videoMutex);
 
         double pts = frame->pts * av_q2d(ctx->formatCtx->streams[ctx->videoStreamIndex]->time_base);
-        LOGE("video2 %f ",pts)
+
         // 更新未播放时长
         double duration = ctx->frameDuration / 1000000.0;
 
         pthread_mutex_lock(&ctx->videoPendingMutex);
         ctx->pendingVideoDuration -= duration;
-        ctx->videoClock= pts;
+        ctx->videoClock = pts;
         if (ctx->pendingVideoDuration < 0) ctx->pendingVideoDuration = 0;
         pthread_mutex_unlock(&ctx->videoPendingMutex);
 
@@ -270,14 +316,14 @@ void *videoPlayThread(void *arg) {
         double audioTime = ctx->audioClock;
         //LOGE("audioTime:%f, pts:%f, syncDiff:%f", audioTime, pts, pts - audioTime)
         pthread_mutex_unlock(&ctx->audioClockMutex);
-
+        LOGE("video2 %f audioTime=%f syncDiff=%f", pts, audioTime, audioTime - pts)
         double syncDiff = audioTime - pts;
         // 获取最后一个关键帧的PTS
         pthread_mutex_lock(&ctx->keyframeMutex);
         int64_t lastKeyPts = ctx->lastKeyFramePts;
         pthread_mutex_unlock(&ctx->keyframeMutex);
 
-        // 处理音频超前（0 < syncDiff < 1秒）
+      /*  // 处理音频超前（0 < syncDiff < 1秒）
         if (syncDiff > 0 && syncDiff < 1.0) {
             // 动态调整播放速度
             double speedFactor = std::min(ctx->maxChaseSpeed, 1.0 + syncDiff * 0.5);
@@ -289,7 +335,7 @@ void *videoPlayThread(void *arg) {
             }
         } else {
             ctx->frameAdjustFactor = 1.0; // 正常播放
-        }
+        }*/
 
         // 计算动态帧间隔
         double adjustedInterval = (ctx->frameDuration / 1000000.0) * ctx->frameAdjustFactor;
@@ -297,10 +343,10 @@ void *videoPlayThread(void *arg) {
         auto now = Clock::now();
         double elapsed = std::chrono::duration<double>(now - lastRenderTime).count();
         double remainingTime = adjustedInterval - elapsed;
-        //LOGE("videoPlayThread wait %f", remainingTime*0.8)
+        LOGE("videoPlayThread wait %f", remainingTime)
         if (remainingTime > 0) {
             // 精确等待剩余时间（缩短等待）
-            std::this_thread::sleep_for(std::chrono::duration<double>(remainingTime * 0.8));
+            std::this_thread::sleep_for(std::chrono::duration<double>(remainingTime));
         } else {
             // 连续超时触发追赶
             static int dropCounter = 0;
@@ -331,24 +377,19 @@ void *videoPlayThread(void *arg) {
 void *audioPlayThread(void *arg) {
     DecodeContext *ctx = (DecodeContext *) arg;
     while (!ctx->abortPlayback) {
-
         pthread_mutex_lock(&ctx->audioMutex);
         while (ctx->audioQueue.empty() && !ctx->abortPlayback) {
             pthread_cond_wait(&ctx->audioCond, &ctx->audioMutex);
         }
-
         if (ctx->abortPlayback) {
             pthread_mutex_unlock(&ctx->audioMutex);
             break;
         }
-
         AudioData audioData = ctx->audioQueue.front();
         ctx->audioQueue.pop();
-
         // 通知解码线程队列有空位
         pthread_cond_signal(&ctx->audioCondNotFull);
         pthread_mutex_unlock(&ctx->audioMutex);
-
         // 更新音频时钟
         int sampleRate = 44100;
         int sampleCount = audioData.size / (2 * sizeof(int16_t));
@@ -358,25 +399,25 @@ void *audioPlayThread(void *arg) {
         ctx->pendingAudioDuration -= duration;
         if (ctx->pendingAudioDuration < 0) ctx->pendingAudioDuration = 0;
         pthread_mutex_unlock(&ctx->audioPendingMutex);
-
         pthread_mutex_lock(&ctx->audioClockMutex);
-        ctx->audioClock = audioData.pts +
-                          (double) duration / ctx->audioCodecCtx->sample_rate; // 精确到已播放样本数
-        LOGE("audio2 %f ",ctx->audioClock)
+        ctx->audioClock = audioData.pts;// +
+        //(double) duration / ctx->audioCodecCtx->sample_rate; // 精确到已播放样本数
+        LOGE("audio2 %f   audioData.pts=%f", ctx->audioClock, audioData.pts)
         pthread_mutex_unlock(&ctx->audioClockMutex);
         pthread_mutex_lock(&ctx->videoPendingMutex);
         double videoPendingTime = ctx->videoClock;
         pthread_mutex_unlock(&ctx->videoPendingMutex);
 
-        double syncDiff =  ctx->audioClock - videoPendingTime;
+        double syncDiff = ctx->audioClock - videoPendingTime;
 
         // **如果音频快了，则延迟播放**
-        if (syncDiff > 0.2) {
-            LOGE("audio ahead=%f   ctx->audioClock=%f   videoPendingTime=%f",syncDiff,ctx->audioClock,videoPendingTime)
+       /* if (syncDiff > 0.1&&videoPendingTime!=0) {
+            LOGE("audio ahead=%f   ctx->audioClock=%f   videoPendingTime=%f", syncDiff,
+                 ctx->audioClock, videoPendingTime)
             std::this_thread::sleep_for(std::chrono::duration<double>(syncDiff)); // 延迟音频播放
-        }
-        if (ctx->audioCallback) {
-            ctx->audioCallback->onAudioEncoded(audioData.data, audioData.size);
+        }*/
+        if (ctx->audioPlayer) {
+            ctx->audioPlayer->writeData(audioData.data, audioData.size);
         }
         if (audioData.data) {
             av_free(audioData.data);
@@ -392,19 +433,12 @@ FFmpegEncodeStream::~FFmpegEncodeStream() {
 }
 
 void FFmpegEncodeStream::setFrameCallback(FrameCallback *callback) {
-    //std::lock_guard<std::mutex> lock(mutex);
     if (decodeCtx) decodeCtx->frameCallback = callback;
 }
 
-void FFmpegEncodeStream::setAudioCallback(AudioCallback *callback) {
-    // std::lock_guard<std::mutex> lock(mutex);
-    if (decodeCtx) decodeCtx->audioCallback = callback;
-}
 
 bool FFmpegEncodeStream::openStream(const char *filePath) {
-    //std::lock_guard<std::mutex> lock(mutex);
     closeStream();
-
     decodeCtx = new DecodeContext();
     decodeCtx->filePath = av_strdup(filePath);
 

@@ -6,10 +6,12 @@
 #define PLAYVIDEO_FFMPEGENCODESTREAM_H
 
 #ifdef __cplusplus
+
 #include <chrono>
 #include <thread>
 #include <queue>
 #include <pthread.h>
+#include "AudioPlayer.h"
 
 extern "C" {
 #include "FrameCallback.h"
@@ -29,6 +31,7 @@ struct AudioData {
     //~AudioData() { if (data) av_free(data); }
 };
 typedef struct DecodeContext {
+    AudioPlayer *audioPlayer = nullptr;
     AVFormatContext *formatCtx = nullptr;
     AVCodecContext *videoCodecCtx = nullptr;
     AVCodecContext *audioCodecCtx = nullptr;
@@ -40,7 +43,6 @@ typedef struct DecodeContext {
     char *filePath = nullptr;
     bool abortRequest = false;
     FrameCallback *frameCallback = nullptr;
-    AudioCallback *audioCallback = nullptr;
     std::queue<AVFrame *> videoQueue;
     std::queue<AudioData> audioQueue;
     pthread_mutex_t videoMutex;
@@ -48,13 +50,13 @@ typedef struct DecodeContext {
     pthread_cond_t videoCond;
     pthread_cond_t audioCond;
     int videoQueueMaxSize = 15;      // 视频队列最大长度
-    int audioQueueMaxSize = 60;      // 音频队列最大长度
+    int audioQueueMaxSize = 200;      // 音频队列最大长度
     pthread_cond_t videoCondNotFull; // 视频队列未满条件
     pthread_cond_t audioCondNotFull; // 音频队列未满条件
-    double audioClock=0.00;
-    double videoClock=0.00;
+    double audioClock = 0.00;
+    double videoClock = 0.00;
     pthread_mutex_t audioClockMutex;
-    bool abortPlayback= false;
+    bool abortPlayback = false;
     pthread_t videoThread;
     pthread_t audioThread;
     double frameRate; // 新增视频帧率
@@ -70,11 +72,12 @@ typedef struct DecodeContext {
     int64_t lastKeyFramePts = -1;      // 最后一个关键帧的PTS
     pthread_mutex_t keyframeMutex;     // 关键帧PTS的互斥锁
     double maxChaseSpeed = 2.0;        // 最大追赶倍速（可配置）
-    void calculateFrameRate(AVStream* stream) {
+    void calculateFrameRate(AVStream *stream) {
         this->frameRate = av_q2d(stream->avg_frame_rate);
         this->frameDuration = (frameRate > 0) ?
                               static_cast<int64_t>(1000000 / frameRate) : 40000; // 默认25fps
     }
+
     ~DecodeContext() {
         cleanup();
     }
@@ -88,10 +91,17 @@ typedef struct DecodeContext {
         pthread_cond_init(&videoCondNotFull, nullptr);
         pthread_cond_init(&audioCondNotFull, nullptr);
         abortPlayback = false;
+        audioPlayer = new AudioPlayer();
+        audioPlayer->startPlayback(44100, 2, oboe::AudioFormat::Float);
     }
 
     void cleanup() {
         LOGE("cleanup")
+        if (audioPlayer) {
+            audioPlayer->stopPlayback();
+            delete audioPlayer;
+            audioPlayer = nullptr;
+        }
         if (swrCtx) {
             swr_free(&swrCtx);
             swrCtx = nullptr;
@@ -148,8 +158,6 @@ public:
     bool openStream(const char *path);
 
     void setFrameCallback(FrameCallback *callback);
-
-    void setAudioCallback(AudioCallback *callback);
 
     void closeStream();
 };

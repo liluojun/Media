@@ -5,6 +5,10 @@
 #ifndef MEDIA_AUDIOPLAYER_H
 #define MEDIA_AUDIOPLAYER_H
 #include <oboe/Oboe.h>
+#include "native_log.h"
+#include <iostream>
+#include <fstream>
+#include <vector>
 
 class AudioPlayer : public oboe::AudioStreamDataCallback {
 public:
@@ -28,6 +32,7 @@ private:
     std::mutex mDataMutex;
     std::vector<uint8_t> mPCMBuffer;  // 环形缓冲区存储 PCM 数据
     oboe::AudioStream *mPlaybackStream = nullptr;
+
 };
 
 

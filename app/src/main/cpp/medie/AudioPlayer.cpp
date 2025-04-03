@@ -3,7 +3,11 @@
 //
 
 #include "AudioPlayer.h"
-AudioPlayer::AudioPlayer() {}
+///storage/emulated/0/Android/data/com.git.media/files/log/
+
+AudioPlayer::AudioPlayer() {
+
+}
 
 AudioPlayer::~AudioPlayer() {
     stopPlayback();
@@ -24,6 +28,7 @@ bool AudioPlayer::startPlayback(int sampleRate, int channelCount, oboe::AudioFor
     // 打开音频流
     oboe::Result result = builder.openStream(&mPlaybackStream);
     if (result != oboe::Result::OK || !mPlaybackStream) {
+        LOGE("Failed to open audio stream: %s", oboe::convertToText(result))
         // 处理错误
         return false;
     }
@@ -34,6 +39,7 @@ bool AudioPlayer::startPlayback(int sampleRate, int channelCount, oboe::AudioFor
 }
 
 void AudioPlayer::stopPlayback() {
+
     if (mPlaybackStream) {
         mPlaybackStream->stop();
         mPlaybackStream->close();
@@ -43,6 +49,7 @@ void AudioPlayer::stopPlayback() {
 
 // 外部写入 PCM 数据到缓冲区
 void AudioPlayer::writeData(const void *data, size_t size) {
+    LOGE("writeData")
     std::lock_guard<std::mutex> lock(mDataMutex);
     const uint8_t *src = static_cast<const uint8_t*>(data);
     mPCMBuffer.insert(mPCMBuffer.end(), src, src + size);
@@ -53,11 +60,9 @@ oboe::DataCallbackResult AudioPlayer::onAudioReady(
         oboe::AudioStream *audioStream,
         void *audioData,
         int32_t numFrames) {
-
     if (!audioStream || !audioData) {
         return oboe::DataCallbackResult::Stop;
     }
-
     size_t bytesPerFrame = audioStream->getBytesPerFrame();
     size_t requestSize = numFrames * bytesPerFrame;
     uint8_t *dst = static_cast<uint8_t*>(audioData);

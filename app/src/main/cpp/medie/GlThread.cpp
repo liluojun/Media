@@ -26,24 +26,20 @@ void GlThread::handleMessage(LooperMessage *msg) {
             if (mRender) {
                 mRender->creatSurface((ANativeWindow *) msg->obj, msg->arg1, msg->arg2);
             }
-            LOGD("kMsgSurfaceCreated");
             break;
 
         case kMsgSurfaceChanged:
             if (mRender) {
                 mRender->changeSurfaceSize(msg->arg1, msg->arg2);
             }
-            LOGD("kMsgSurfaceChanged");
             break;
 
         case kMsgSurfaceDestroyed:
             if (mRender) {
                 mRender->destorySurface();
             }
-            LOGD("kMsgSurfaceDestroyed");
             break;
         case kMsgYuvData:
-            LOGD("kMsgYuvData");
             if (mRender) {
                 if (mRender->m != NULL && mRender->isSurfaceCreated) {
                     glClearColor(1.0, 1.0, 1.0, 1.0);
@@ -60,7 +56,6 @@ void GlThread::handleMessage(LooperMessage *msg) {
                     delete (msg->obj);
                 }
             }
-            LOGD("kMsgYuvData");
             break;
         case kMsgAiFrame: {
             if (mAiFrame) {

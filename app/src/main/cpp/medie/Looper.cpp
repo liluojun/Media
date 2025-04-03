@@ -140,7 +140,6 @@ void Looper::loop() {
         sem_wait(&headwriteprotect);
         LooperMessage *msg = head;
         if (msg == NULL) {
-            LOGD("no msg");
             sem_post(&headwriteprotect);
             continue;
         }
@@ -148,11 +147,9 @@ void Looper::loop() {
         sem_post(&headwriteprotect);
 
         if (msg->quit) {
-            LOGD("quitting");
             delete msg;
             return;
         }
-        LOGD("processing msg %d", msg->what);
         handleMessage(msg);
         delete msg;
     }
@@ -162,7 +159,6 @@ void Looper::loop() {
  * 退出Looper循环
  */
 void Looper::quit() {
-    LOGD("quit");
     LooperMessage *msg = new LooperMessage();
     msg->what = 0;
     msg->obj = NULL;
