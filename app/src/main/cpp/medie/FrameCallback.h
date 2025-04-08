@@ -7,7 +7,7 @@
 #define FRAME_CALLBACK_H
 
 #include <stdint.h>
-#include "libavformat/avformat.h"
+#include "ffmpeg/include/libavformat/avformat.h"
 
 #ifdef __cplusplus
 extern "C" {

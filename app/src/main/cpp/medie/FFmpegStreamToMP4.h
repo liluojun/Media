@@ -13,10 +13,10 @@
 
 extern "C" {
 #include "native_log.h"
-#include "libavformat/avformat.h"
-#include "libavcodec/avcodec.h"
-#include "libswresample/swresample.h"
-#include "libavutil/intreadwrite.h"
+#include "ffmpeg/include/libavformat/avformat.h"
+#include "ffmpeg/include/libavcodec/avcodec.h"
+#include "ffmpeg/include/libswresample/swresample.h"
+#include "ffmpeg/include/libavutil/intreadwrite.h"
 
 
 #endif

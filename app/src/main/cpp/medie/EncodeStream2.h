@@ -1,9 +1,9 @@
 //
-// Created by Administrator on 2020/3/21.
+// Created by hjt on 2025/4/8.
 //
 
-#ifndef PLAYVIDEO_FFMPEGENCODESTREAM_H
-#define PLAYVIDEO_FFMPEGENCODESTREAM_H
+#ifndef MEDIA_ENCODESTREAM2_H
+#define MEDIA_ENCODESTREAM2_H
 
 #ifdef __cplusplus
 
@@ -36,21 +36,21 @@ typedef struct DecodeContext {
     AVCodecContext *videoCodecCtx = nullptr;
     AVCodecContext *audioCodecCtx = nullptr;
     SwrContext *swrCtx = nullptr;
-    AVFrame *frame = nullptr;
-    AVPacket *packet = nullptr;
     int videoStreamIndex = -1;
     int audioStreamIndex = -1;
     char *filePath = nullptr;
     bool abortRequest = false;
-    FrameCallback *frameCallback = nullptr;
+    std::queue<AVPacket *>videoWaitingDecode;
+    std::queue<AVPacket *>audioWaitingDecode;
     std::queue<AVFrame *> videoQueue;
     std::queue<AudioData> audioQueue;
+
     pthread_mutex_t videoMutex;
     pthread_mutex_t audioMutex;
     pthread_cond_t videoCond;
     pthread_cond_t audioCond;
     int videoQueueMaxSize = 50;      // 视频队列最大长度
-    int audioQueueMaxSize = 1000;      // 音频队列最大长度
+    int audioQueueMaxSize = 100;      // 音频队列最大长度
     pthread_cond_t videoCondNotFull; // 视频队列未满条件
     pthread_cond_t audioCondNotFull; // 音频队列未满条件
     double audioClock = 0.00;
@@ -155,4 +155,4 @@ public:
 #ifdef __cplusplus
 }
 #endif
-#endif //PLAYVIDEO_FFMPEGENCODESTREAM_H
+#endif //MEDIA_ENCODESTREAM2_H
