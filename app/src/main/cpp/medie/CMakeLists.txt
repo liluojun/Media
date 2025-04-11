@@ -23,6 +23,7 @@ set(MEDIE_SOURCES
         native.cpp
         JniUtils.cpp
         FFmpegEncodeStream.cpp
+        EncodeStream2.cpp
         FFmpegStreamToMP4.cpp
         cJSON.c
         AiLineHelper.cpp

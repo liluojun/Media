@@ -12,6 +12,7 @@
 #include <queue>
 #include <pthread.h>
 #include "AudioPlayer.h"
+#include "FFmpegEncodeStream.h"
 
 extern "C" {
 #include "FrameCallback.h"
@@ -21,129 +22,158 @@ extern "C" {
 #include "ffmpeg/include/libswresample/swresample.h"
 
 #endif
-struct AudioData {
-    uint8_t *data;
-    int size;
-    double pts;
 
-    AudioData() : data(nullptr), size(0), pts(0.0) {}
-
-    //~AudioData() { if (data) av_free(data); }
-};
-typedef struct DecodeContext {
-    AudioPlayer *audioPlayer = nullptr;
-    AVFormatContext *formatCtx = nullptr;
+typedef struct ViedoDecodeContext {
     AVCodecContext *videoCodecCtx = nullptr;
-    AVCodecContext *audioCodecCtx = nullptr;
-    SwrContext *swrCtx = nullptr;
-    int videoStreamIndex = -1;
-    int audioStreamIndex = -1;
-    char *filePath = nullptr;
     bool abortRequest = false;
-    std::queue<AVPacket *>videoWaitingDecode;
-    std::queue<AVPacket *>audioWaitingDecode;
-    std::queue<AVFrame *> videoQueue;
-    std::queue<AudioData> audioQueue;
-
-    pthread_mutex_t videoMutex;
-    pthread_mutex_t audioMutex;
-    pthread_cond_t videoCond;
-    pthread_cond_t audioCond;
-    int videoQueueMaxSize = 50;      // 视频队列最大长度
-    int audioQueueMaxSize = 100;      // 音频队列最大长度
-    pthread_cond_t videoCondNotFull; // 视频队列未满条件
-    pthread_cond_t audioCondNotFull; // 音频队列未满条件
-    double audioClock = 0.00;
-    double videoClock = 0.00;
-    pthread_mutex_t audioClockMutex;
-    bool abortPlayback = false;
-    pthread_t videoThread;
-    pthread_t audioThread;
+    bool renderRequest = false;
+    std::queue<AVFrame *> videoDecodeQueue;
+    int MAX_VIDEO_FRAME = 50;
+    pthread_mutex_t viedoDecodeMutex;
+    pthread_cond_t viedoDecodeFullCond;
+    pthread_cond_t viedoDecodeEmptyCond;
+    std::thread videoDecodeThread;
+    std::thread videoRendderThread;
     double frameRate; // 新增视频帧率
     int64_t frameDuration; // 帧持续时间(微秒)
-    float frameAdjustFactor=1.0;
+    float frameAdjustFactor = 1.0;
+    FrameCallback *frameCallback = nullptr;
+
     void calculateFrameRate(AVStream *stream) {
         this->frameRate = av_q2d(stream->avg_frame_rate);
         this->frameDuration = (frameRate > 0) ?
                               static_cast<int64_t>(1000000 / frameRate) : 40000; // 默认25fps
     }
 
-    ~DecodeContext() {
-        cleanup();
+    void init() {
+        pthread_mutex_init(&viedoDecodeMutex, nullptr);
+        pthread_cond_init(&viedoDecodeFullCond, nullptr);
+        pthread_cond_init(&viedoDecodeEmptyCond, nullptr);
+    };
+
+    ~ViedoDecodeContext() {
+        abortRequest = true;
+        renderRequest = true;
+        pthread_cond_signal(&viedoDecodeFullCond);
+        pthread_cond_signal(&viedoDecodeEmptyCond);
+        if (videoCodecCtx) {
+            avcodec_free_context(&videoCodecCtx);
+        }
+        if (videoDecodeThread.joinable()) {
+            videoDecodeThread.join();
+        }
+        if (videoRendderThread.joinable()) {
+            videoRendderThread.join();
+        }
+    }
+} VideoDecodeContext;
+typedef struct AudioDecodeContext {
+    AVCodecContext *audioDecodeCtx = nullptr;
+    bool abortRequest = false;
+    bool playRequest = false;
+    std::queue<AudioData> audioDecodeQueue;
+    int MAX_AUDIO_FRAME = 50;
+    pthread_mutex_t audioDecodeMutex;
+    pthread_cond_t audioDecodeFullCond;
+    pthread_cond_t audioDecodeEmptyCond;
+    std::thread audioDecodeThread;
+    std::thread audioRendderThread;
+
+    void init() {
+        pthread_mutex_init(&audioDecodeMutex, nullptr);
+        pthread_cond_init(&audioDecodeFullCond, nullptr);
+        pthread_cond_init(&audioDecodeEmptyCond, nullptr);
+    };
+
+    ~AudioDecodeContext() {
+        abortRequest = true;
+        playRequest = true;
+        pthread_cond_signal(&audioDecodeFullCond);
+        pthread_cond_signal(&audioDecodeEmptyCond);
+        if (audioDecodeCtx) {
+            avcodec_free_context(&audioDecodeCtx);
+        }
+        if (audioDecodeThread.joinable()) {
+            audioDecodeThread.join();
+        }
+        if (audioRendderThread.joinable()) {
+            audioRendderThread.join();
+        }
+    }
+} AudioDecodeContext;
+typedef struct ReadContext {
+    VideoDecodeContext *videoDecodeCtx = nullptr;
+    AudioDecodeContext *audioDecodeCtx = nullptr;
+    bool videoInitFail = false;
+    bool audioInitFail = false;
+    AudioPlayer *audioPlayer = nullptr;
+    AVFormatContext *formatCtx = nullptr;
+    char *filePath = nullptr;
+    bool abortRequest = false;
+    bool audioPlayInit = false;
+    std::queue<AVPacket *> videoReadDecode;
+    std::queue<AVPacket *> audioReadDecode;
+    int videoStreamIndex = -1;
+    int audioStreamIndex = -1;
+    int MAX_VIDEO_PACKET = 50;
+    int MAX_AUDIO_PACKET = 200;
+    pthread_mutex_t readVideoMutex;
+    pthread_cond_t readVideoCond;
+    pthread_mutex_t readAudioMutex;
+    pthread_cond_t readAudioCond;
+    int videoClock = 0;
+    int audioClock = 0;
+
+    void audioInitFailClean() {
+        pthread_mutex_lock(&readAudioMutex);
+        audioInitFail = true;
+        while (!audioReadDecode.empty()) {
+            AVPacket *pkt = audioReadDecode.front();
+            av_packet_free(&pkt);  // FFmpeg 的标准释放方式
+            audioReadDecode.pop();
+        }
+        pthread_mutex_unlock(&readAudioMutex);
+    }
+
+    void videoInitFailClean() {
+        pthread_mutex_lock(&readVideoMutex);
+        videoInitFail = true;
+        while (!videoReadDecode.empty()) {
+            AVPacket *pkt = videoReadDecode.front();
+            av_packet_free(&pkt);  // FFmpeg 的标准释放方式
+            videoReadDecode.pop();
+        }
+        pthread_mutex_unlock(&readVideoMutex);
     }
 
     void init() {
-        pthread_mutex_init(&videoMutex, nullptr);
-        pthread_mutex_init(&audioMutex, nullptr);
-        pthread_cond_init(&videoCond, nullptr);
-        pthread_cond_init(&audioCond, nullptr);
-        pthread_mutex_init(&audioClockMutex, nullptr);
-        pthread_cond_init(&videoCondNotFull, nullptr);
-        pthread_cond_init(&audioCondNotFull, nullptr);
-        abortPlayback = false;
+        pthread_mutex_init(&readVideoMutex, nullptr);
+        pthread_cond_init(&readVideoCond, nullptr);
+        pthread_mutex_init(&readAudioMutex, nullptr);
+        pthread_cond_init(&readAudioCond, nullptr);
         audioPlayer = new AudioPlayer();
-        audioPlayer->startPlayback(44100, 2, oboe::AudioFormat::Float);
-    }
+    };
 
-    void cleanup() {
-        LOGE("cleanup")
-        if (audioPlayer) {
-            audioPlayer->stopPlayback();
-            delete audioPlayer;
-            audioPlayer = nullptr;
-        }
-        if (swrCtx) {
-            swr_free(&swrCtx);
-            swrCtx = nullptr;
-        }
-        if (frame) {
-            av_frame_free(&frame);
-            frame = nullptr;
-        }
-        if (packet) {
-            av_packet_free(&packet);
-            packet = nullptr;
-        }
-        if (videoCodecCtx) {
-            avcodec_free_context(&videoCodecCtx);
-            videoCodecCtx = nullptr;
-        }
-        if (audioCodecCtx) {
-            avcodec_free_context(&audioCodecCtx);
-            audioCodecCtx = nullptr;
+    ~ReadContext() {
+        if (videoDecodeCtx) {
+            delete videoDecodeCtx;
         }
         if (formatCtx) {
             avformat_close_input(&formatCtx);
-            formatCtx = nullptr;
-        }
-        pthread_mutex_destroy(&videoMutex);
-        pthread_mutex_destroy(&audioMutex);
-        pthread_cond_destroy(&videoCond);
-        pthread_cond_destroy(&audioCond);
-        pthread_mutex_destroy(&audioClockMutex);
-        pthread_cond_destroy(&videoCondNotFull);
-        pthread_cond_destroy(&audioCondNotFull);
-        while (!videoQueue.empty()) {
-            av_frame_free(&videoQueue.front());
-            videoQueue.pop();
-        }
-        while (!audioQueue.empty()) {
-            audioQueue.pop();
         }
     }
-} DecodeContext;
-class FFmpegEncodeStream {
+} ReadContext;
+
+class EncodeStream2 {
 private:
-    DecodeContext *decodeCtx;
-    pthread_t threadId;
+    ReadContext *decodeCtx = nullptr;
+    FrameCallback *frameCallback = nullptr;
+    std::thread workerThread;
 public:
-    bool containsSEI(const uint8_t *data, int size);
 
-    bool extractSEIData(const uint8_t *data, int size, uint8_t **seiData, int *seiSize);
+    EncodeStream2();
 
-    FFmpegEncodeStream();
-
-    ~FFmpegEncodeStream();
+    ~EncodeStream2();
 
     bool openStream(const char *path);
 
