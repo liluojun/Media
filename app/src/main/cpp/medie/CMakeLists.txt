@@ -24,6 +24,7 @@ set(MEDIE_SOURCES
         JniUtils.cpp
         FFmpegEncodeStream.cpp
         EncodeStream2.cpp
+        EncodeNakedStream.cpp
         FFmpegStreamToMP4.cpp
         cJSON.c
         AiLineHelper.cpp

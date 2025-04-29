@@ -333,7 +333,6 @@ void readThread(ReadContext *ctx) {
 }
 
 bool EncodeStream2::openStream(const char *filePath) {
-
     try {
         closeStream();
         decodeCtx = new ReadContext();

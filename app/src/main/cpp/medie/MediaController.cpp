@@ -8,7 +8,9 @@ int MediaController::openStream(std::string *path) {
     auto it = pathPlayerMap.find(*path);
     if (it == pathPlayerMap.end()) {
         Player *player = new Player();
-        player->mFFmpegEncodeStream = new EncodeStream2();
+        //player->mFFmpegEncodeStream = new EncodeStream2();
+
+        player->mFFmpegEncodeStream = new EncodeNakedStream();
         player->mGlThread = new GlThread();
         pathPlayerMap[*path] = player;
         player->mFFmpegEncodeStream->openStream(stringToChar(*path).data());

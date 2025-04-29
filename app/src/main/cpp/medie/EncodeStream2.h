@@ -38,7 +38,8 @@ typedef struct ViedoDecodeContext {
     int64_t frameDuration; // 帧持续时间(微秒)
     float frameAdjustFactor = 1.0;
     FrameCallback *frameCallback = nullptr;
-
+    AVRational user_time_base;
+    int frame_count;
     void calculateFrameRate(AVStream *stream) {
         this->frameRate = av_q2d(stream->avg_frame_rate);
         this->frameDuration = (frameRate > 0) ?
@@ -78,7 +79,8 @@ typedef struct AudioDecodeContext {
     pthread_cond_t audioDecodeEmptyCond;
     std::thread audioDecodeThread;
     std::thread audioRendderThread;
-
+    AVRational user_time_base;
+    int pts=0;
     void init() {
         pthread_mutex_init(&audioDecodeMutex, nullptr);
         pthread_cond_init(&audioDecodeFullCond, nullptr);
@@ -157,6 +159,9 @@ typedef struct ReadContext {
     ~ReadContext() {
         if (videoDecodeCtx) {
             delete videoDecodeCtx;
+        }
+        if (audioDecodeCtx) {
+            delete audioDecodeCtx;
         }
         if (formatCtx) {
             avformat_close_input(&formatCtx);

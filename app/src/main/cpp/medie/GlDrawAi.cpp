@@ -62,7 +62,7 @@ void GlDrawAi::drawAi(AiLineData *pData, int w, int h,int vw, int vh) {
 }
 
 void GlDrawAi::drawSegment(AiLineData *pData, int w, int h,int vw, int vh) {
-    Shader mShader = prepareShader(AI_VERTEX_SHADER_STRING, AI_FRAGMENT_SHADER_STRING, w, h);
+    Shader mShader = prepareShader(AI_VERTEX_SHADER_STRING, AI_FRAGMENT_SHADER_STRING, vw, vh);
     glBindFramebuffer(GL_FRAMEBUFFER, mShader.glShader.getFBO());
     glViewport(0, 0, vw, vh);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);

@@ -5,6 +5,7 @@
 #ifndef MEDIA_MEDIACONTROLLER_H
 #define MEDIA_MEDIACONTROLLER_H
 
+#include "EncodeNakedStream.h"
 #include "FFmpegEncodeStream.h"
 #include "EncodeStream2.h"
 #include "native_log.h"
@@ -27,7 +28,8 @@ typedef struct TsInfo {
  * 包含编码回调代理类的实现和回调设置逻辑
  */
 typedef struct {
-    EncodeStream2 *mFFmpegEncodeStream = NULL;
+    //  EncodeStream2 *mFFmpegEncodeStream = NULL;
+    EncodeNakedStream *mFFmpegEncodeStream = NULL;
     GlThread *mGlThread = NULL;
 
 

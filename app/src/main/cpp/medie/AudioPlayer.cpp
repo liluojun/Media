@@ -68,7 +68,6 @@ oboe::DataCallbackResult AudioPlayer::onAudioReady(
     uint8_t *dst = static_cast<uint8_t*>(audioData);
 
     std::lock_guard<std::mutex> lock(mDataMutex);
-
     // 检查缓冲区是否有足够数据
     if (mPCMBuffer.size() >= requestSize) {
         // 拷贝数据到音频设备缓冲区
