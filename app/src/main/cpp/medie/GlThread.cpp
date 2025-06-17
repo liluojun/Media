@@ -22,6 +22,9 @@ void GlThread::handleMessage(LooperMessage *msg) {
         return;
     }
     switch (msg->what) {
+        case kMsgShareModel: {
+            shareModel = msg->arg1;
+        }
         case kMsgSurfaceCreated:
             if (mRender) {
                 mRender->creatSurface((ANativeWindow *) msg->obj, msg->arg1, msg->arg2);
@@ -42,7 +45,7 @@ void GlThread::handleMessage(LooperMessage *msg) {
         case kMsgYuvData:
             if (mRender) {
                 if (mRender->m != NULL && mRender->isSurfaceCreated) {
-                    glClearColor(1.0, 1.0, 1.0, 1.0);
+                    glClearColor(0.0, 0.0, 0.0, 1.0);
                     glClear(GL_STENCIL_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                     drawVideoFrames(mRender->m, (YuvData *) msg->obj, msg->arg1,
                                     msg->arg2);
@@ -69,7 +72,9 @@ void GlThread::handleMessage(LooperMessage *msg) {
 void GlThread::drawVideoFrames(RenderWindow *m, YuvData *data, int w, int h) {
     GLuint yuvTextures[3];
     m->mGlDraw->perparDrawYuv(w, h, data, yuvTextures);
-    m->mGlDraw->drawYuv(yuvTextures, 0, 0, m->w, m->h);
+    float scale[2]={1.0f,1.0f};
+    calculateScale(w, h, m->w, m->h, shareModel, scale);
+    m->mGlDraw->drawYuv(yuvTextures, 0, 0, m->w, m->h,  scale);
 }
 
 bool GlThread::drawAiFrames(RenderWindow *m, int w, int h) {
@@ -80,7 +85,9 @@ bool GlThread::drawAiFrames(RenderWindow *m, int w, int h) {
             mAiFrame->timestamp = 0;
             return false;
         } else {
-            m->mGlDrawAi->drawAi(mAiFrame->data, w, h, m->w, m->h);
+            float scale[2]={1.0f,1.0f};
+            calculateScale(w, h, m->w, m->h, shareModel, scale);
+            m->mGlDrawAi->drawAi(mAiFrame->data, w, h, m->w, m->h,scale);
             return true;
         }
 
@@ -98,6 +105,39 @@ bool GlThread::getIsSurfaceCreated() {
         return mRender->isSurfaceCreated;
     else
         return false;
+}
+
+void GlThread::calculateScale(float contentW, float contentH, float viewW, float viewH, int fit,
+                    float outScale[2]) {
+    float contentRatio = contentW / contentH;
+    float viewRatio = viewW / viewH;
+
+    float scaleX, scaleY;
+
+    if (fit == 1) {
+        if (contentRatio > viewRatio) {
+            scaleX = 1.0f;
+            scaleY = viewRatio / contentRatio;
+        } else {
+            scaleX = contentRatio / viewRatio;
+            scaleY = 1.0f;
+        }
+    } else if (fit == 2) {
+        if (contentRatio > viewRatio) {
+            scaleX = contentRatio / viewRatio;
+            scaleY = 1.0f;
+        } else {
+            scaleX = 1.0f;
+            scaleY = viewRatio / contentRatio;
+        }
+    } else {
+        scaleX = 1.0f;
+        scaleY = 1.0f;
+    }
+
+
+    outScale[0] = scaleX;
+    outScale[1] = scaleY;
 }
 
 GlThread::~GlThread() {

@@ -34,10 +34,10 @@ void GlDrawAi::release() {
     shaders.clear();
 }
 
-void GlDrawAi::drawAi(AiLineData *pData, int w, int h,int vw, int vh) {
+void GlDrawAi::drawAi(AiLineData *pData, int w, int h,int vw, int vh,float *scale) {
     switch (pData->drawType) {
         case LINE_SEGMENT: {
-            drawSegment(pData, w, h,vw,vh);
+            drawSegment(pData, w, h,vw,vh,scale);
             break;
         }
             /*  case LINE_STRIP: {
@@ -61,7 +61,7 @@ void GlDrawAi::drawAi(AiLineData *pData, int w, int h,int vw, int vh) {
 
 }
 
-void GlDrawAi::drawSegment(AiLineData *pData, int w, int h,int vw, int vh) {
+void GlDrawAi::drawSegment(AiLineData *pData, int w, int h,int vw, int vh,float *scale) {
     Shader mShader = prepareShader(AI_VERTEX_SHADER_STRING, AI_FRAGMENT_SHADER_STRING, vw, vh);
     glBindFramebuffer(GL_FRAMEBUFFER, mShader.glShader.getFBO());
     glViewport(0, 0, vw, vh);
@@ -76,6 +76,11 @@ void GlDrawAi::drawSegment(AiLineData *pData, int w, int h,int vw, int vh) {
     if (mColorHandle == -1) {
         return;
     }
+    int scaleLoc=mShader.glShader.getUniformLocation("scale");
+    if (scaleLoc != -1) {
+        glUniform2fv(scaleLoc, 1, scale);  // 传入float[2]的缩放值
+    }
+
     glUniform4fv(mColorHandle, 1, pData->color);
     glLineWidth(pData->lineWidth);
     glDrawArrays(GL_LINES, 0, pData->buffer_size / 3);

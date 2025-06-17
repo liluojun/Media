@@ -24,11 +24,11 @@ class GlDrawAi {
     GLint fboTextureId;
 
 public:
-    void drawAi(AiLineData *pData, int w, int h,int vw, int vh);
+    void drawAi(AiLineData *pData, int w, int h,int vw, int vh,float *scale);
 
     void release();
 
-    void drawSegment(AiLineData *pData, int w, int h,int vw, int vh);
+    void drawSegment(AiLineData *pData, int w, int h,int vw, int vh,float *scale);
 
     GLint getFboTexture();
 };

@@ -43,9 +43,10 @@ void GlDraw::perparDrawYuv(int width, int height, YuvData *data, GLuint yuvTextu
 }
 
 void GlDraw::drawYuv(GLuint *yuvTextures,
-                     int viewportX, int viewportY, int viewportWidth, int viewportHeight) {
+                     int viewportX, int viewportY, int viewportWidth, int viewportHeight,
+                     float *scale) {
     drawYuv(yuvTextures, matrix4x4, viewportX, viewportY,
-            viewportWidth, viewportHeight);
+            viewportWidth, viewportHeight, scale);
 }
 
 /**
@@ -55,8 +56,9 @@ void GlDraw::drawYuv(GLuint *yuvTextures,
 
 //
 void GlDraw::drawYuv(GLuint *yuvTextures, float *texMatrix,
-                     int viewportX, int viewportY, int viewportWidth, int viewportHeight) {
-    prepareShader(YUV_FRAGMENT_SHADER_STRING, texMatrix);
+                     int viewportX, int viewportY, int viewportWidth, int viewportHeight,
+                     float *scale) {
+    prepareShader(YUV_FRAGMENT_SHADER_STRING, texMatrix, scale);
     //Bind the textures.
     //后面渲染的时候，设置三成纹理
     for (int i = 0; i < 3; ++i) {
@@ -76,21 +78,23 @@ void GlDraw::drawRectangle(int x, int y, int width, int height) {
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
-void GlDraw::prepareShader(std::string fragmentShader, float *texMatrix) {
-
+void GlDraw::prepareShader(std::string fragmentShader, float *texMatrix, float *scale) {
     if (shaders.count(fragmentShader) > 0) {
         Shader shader = shaders[fragmentShader];
         shader.glShader.useProgram();
         glUniformMatrix4fv(shader.texMatrixLocation, 1, false, texMatrix);
+        glUniform2f(shader.scaleLocation, scale[0], scale[1]);
     } else {
         // Lazy allocation.
         char *s = (char *) VERTEX_SHADER_STRING.data();
         char *s1 = (char *) fragmentShader.c_str();
         GlRendering *mGlRendering = new GlRendering(s, s1);
         int texMatrixLocation = mGlRendering->getUniformLocation("texMatrix");
+        int scaleLocation = mGlRendering->getUniformLocation("scale");
         Shader *shader = new Shader();
         shader->glShader = *mGlRendering;
         shader->texMatrixLocation = texMatrixLocation;
+        shader->scaleLocation = scaleLocation;
         shaders[fragmentShader] = *shader;
         shader->glShader.useProgram();
         // Initialize fragment shader uniform values.
@@ -109,6 +113,7 @@ void GlDraw::prepareShader(std::string fragmentShader, float *texMatrix) {
         checkNoGLES2Error("in_tc.");
         shader->glShader.useProgram();
         glUniformMatrix4fv(shader->texMatrixLocation, 1, false, texMatrix);
+        glUniform2f(shader->scaleLocation, scale[0], scale[1]);
     }
 
 
@@ -120,7 +125,7 @@ void GlDraw::prepareShader(std::string fragmentShader, float *texMatrix) {
 
 
 void GlDraw::release() {
-    for (auto[key, val]:shaders) {
+    for (auto [key, val]: shaders) {
         val.glShader.release();
 
     }

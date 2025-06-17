@@ -18,17 +18,17 @@ public:
 
     std::map<std::string, Shader> shaders;
 
-    void prepareShader(std::string fragmentShader, float *texMatrix);
+    void prepareShader(std::string fragmentShader, float *texMatrix, float *scale);
 
     void drawYuv(GLuint yuvTextures[3], float *texMatrix,
-                 int viewportX, int viewportY, int viewportWidth, int viewportHeight);
+                 int viewportX, int viewportY, int viewportWidth, int viewportHeight,float *scale);
 
     void drawRectangle(int x, int y, int width, int height);
 
     void release();
 
     void drawYuv(GLuint yuvTextures[3],
-                 int viewportX, int viewportY, int viewportWidth, int viewportHeight);
+                 int viewportX, int viewportY, int viewportWidth, int viewportHeight,float *scale);
 
     void perparDrawYuv(int width, int height, YuvData *data, GLuint yuvTextures[3]);
 };

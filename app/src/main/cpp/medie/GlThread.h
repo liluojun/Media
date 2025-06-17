@@ -17,6 +17,7 @@ enum {
     kMsgSurfaceDestroyed,
     kMsgYuvData,
     kMsgAiFrame,
+    kMsgShareModel,
 };
 typedef struct AiFrame {
     long timestamp;
@@ -37,11 +38,13 @@ public:
 private:
     VideoRender *mRender;
     AiFrame *mAiFrame;
+    int shareModel=1;//0填充模式，1等比缩放，2居中填充。
 
     void drawVideoFrames(RenderWindow *m, YuvData *pData, int arg1, int arg2);
 
     bool drawAiFrames(RenderWindow *m, int w, int h);
     void drawFboMix(RenderWindow *m, int w, int h);
+    void calculateScale(float contentW, float contentH, float viewW, float viewH, int fit, float outScale[2]);
 };
 
 

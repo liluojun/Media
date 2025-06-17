@@ -8,6 +8,7 @@
 typedef struct Shader {
     GlRendering glShader;
     int texMatrixLocation;
+    int scaleLocation;
 } Shader;
 
 #endif //MEDIA_SHADER_H
