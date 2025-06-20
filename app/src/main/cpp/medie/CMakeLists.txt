@@ -18,7 +18,7 @@ set(LOCAL_PATH ${CMAKE_CURRENT_SOURCE_DIR})  # 等效于 $(call my-dir)
 set(YUV_LIB_DIR "${LOCAL_PATH}/ffmpeg/${ANDROID_ABI}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../jniLibs/${ANDROID_ABI})
 set(OBOE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../oboe)
-
+set(COMMON_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../common)
 set(MEDIE_SOURCES
         native.cpp
         JniUtils.cpp
@@ -43,6 +43,7 @@ set(MEDIE_SOURCES
 
 )
 add_subdirectory(${OBOE_DIR} ./oboe)
+add_subdirectory(${COMMON_DIR} ./common)
 # 添加预编译的 so
 add_library(avcodec SHARED IMPORTED)
 set_target_properties(avcodec PROPERTIES
@@ -70,6 +71,7 @@ set_target_properties(swscale PROPERTIES
         IMPORTED_LOCATION "${YUV_LIB_DIR}/lib/libswscale.so"
 )
 include_directories("${OBOE_DIR}/include")
+include_directories("${COMMON_DIR}/include")
 include_directories("${YUV_LIB_DIR}/include")
 add_library(${PROJECT_NAME} SHARED ${MEDIE_SOURCES})
 
@@ -86,5 +88,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
         GLESv2
         EGL
         oboe
+        common
 
 )

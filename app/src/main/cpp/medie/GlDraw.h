@@ -5,7 +5,7 @@
 #ifndef PLAYVIDEO_GLDRAW_H
 #define PLAYVIDEO_GLDRAW_H
 
-#include "YuvData.h"
+#include "../common/include/YuvData.h"
 #include "Shader.h"
 #include "EglUtils.cpp"
 #include <iostream>

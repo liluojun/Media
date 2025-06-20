@@ -180,3 +180,90 @@ void Looper::quit() {
 void Looper::handleMessage(LooperMessage *msg) {
     LOGD("dropping msg %d %p", msg->what, msg->obj);
 }
+/*// Cross-platform Looper using std::thread and std::mutex
+// Supports safe message posting and FIFO processing
+
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
+#include <atomic>
+#include <functional>
+#include <memory>
+
+struct LooperMessage {
+    int what;
+    int arg1;
+    int arg2;
+    void* obj;
+
+    LooperMessage(int w, int a1 = 0, int a2 = 0, void* o = nullptr)
+        : what(w), arg1(a1), arg2(a2), obj(o) {}
+};
+
+class Looper {
+public:
+    using MessageHandler = std::function<void(std::shared_ptr<LooperMessage>)>;
+
+    explicit Looper(MessageHandler handler)
+        : handler(handler), running(true), worker(&Looper::loop, this) {}
+
+    ~Looper() {
+        quit();
+    }
+
+    void postMessage(int what, int arg1 = 0, int arg2 = 0, void* obj = nullptr, bool flush = false) {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (!running) return;
+
+        if (flush) {
+            while (!queue.empty()) queue.pop();
+        }
+
+        queue.push(std::make_shared<LooperMessage>(what, arg1, arg2, obj));
+        cond.notify_one();
+    }
+
+    void quit() {
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            running = false;
+            cond.notify_all();
+        }
+        if (worker.joinable()) {
+            worker.join();
+        }
+    }
+
+private:
+    void loop() {
+        while (true) {
+            std::shared_ptr<LooperMessage> msg;
+            {
+                std::unique_lock<std::mutex> lock(mutex);
+                cond.wait(lock, [&] { return !queue.empty() || !running; });
+                if (!running && queue.empty()) break;
+                msg = queue.front();
+                queue.pop();
+            }
+            if (handler && msg) {
+                handler(msg);
+            }
+        }
+    }
+
+    std::mutex mutex;
+    std::condition_variable cond;
+    std::queue<std::shared_ptr<LooperMessage>> queue;
+    std::thread worker;
+    std::atomic<bool> running;
+    MessageHandler handler;
+};
+
+// Usage Example:
+// Looper looper([](std::shared_ptr<LooperMessage> msg) {
+//     std::cout << "Message: " << msg->what << std::endl;
+// });
+// looper.postMessage(1);
+// looper.quit();
+*/

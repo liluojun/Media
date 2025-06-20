@@ -8,7 +8,7 @@
 
 #include "Looper.h"
 #include "VideoRender.h"
-#include "YuvData.h"
+#include "../common/include/YuvData.h"
 #include "AiLineHelper.h"
 
 enum {
