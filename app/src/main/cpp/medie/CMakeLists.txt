@@ -15,79 +15,30 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # 根据当前 ABI 动态获取预编译库路径
 set(LOCAL_PATH ${CMAKE_CURRENT_SOURCE_DIR})  # 等效于 $(call my-dir)
-set(YUV_LIB_DIR "${LOCAL_PATH}/ffmpeg/${ANDROID_ABI}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../jniLibs/${ANDROID_ABI})
 set(OBOE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../oboe)
 set(COMMON_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../common)
+set(SHARED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../shared)
+set(DECODE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../decode)
 set(MEDIE_SOURCES
         native.cpp
         JniUtils.cpp
-        FFmpegEncodeStream.cpp
-        EncodeStream2.cpp
-        EncodeNakedStream.cpp
-        FFmpegStreamToMP4.cpp
-        cJSON.c
-        AiLineHelper.cpp
-        VideoRender.cpp
-        EglEnvironment.cpp
-        EglUtils.cpp
-        GlRendering.cpp
-        GlDraw.cpp
-        GlDrawAi.cpp
-        GlDrawFbo.cpp
-        GlThread.cpp
-        Looper.cpp
-        Utils.cpp
         MediaController.cpp
-        AudioPlayer.cpp
-
 )
 add_subdirectory(${OBOE_DIR} ./oboe)
 add_subdirectory(${COMMON_DIR} ./common)
-# 添加预编译的 so
-add_library(avcodec SHARED IMPORTED)
-set_target_properties(avcodec PROPERTIES
-        IMPORTED_LOCATION "${YUV_LIB_DIR}/lib/libavcodec.so"
-)
-add_library(avfilter SHARED IMPORTED)
-set_target_properties(avfilter PROPERTIES
-        IMPORTED_LOCATION "${YUV_LIB_DIR}/lib/libavfilter.so"
-)
-
-add_library(avformat SHARED IMPORTED)
-set_target_properties(avformat PROPERTIES
-        IMPORTED_LOCATION "${YUV_LIB_DIR}/lib/libavformat.so"
-)
-add_library(avutil SHARED IMPORTED)
-set_target_properties(avutil PROPERTIES
-        IMPORTED_LOCATION "${YUV_LIB_DIR}/lib/libavutil.so"
-)
-add_library(swresample SHARED IMPORTED)
-set_target_properties(swresample PROPERTIES
-        IMPORTED_LOCATION "${YUV_LIB_DIR}/lib/libswresample.so"
-)
-add_library(swscale SHARED IMPORTED)
-set_target_properties(swscale PROPERTIES
-        IMPORTED_LOCATION "${YUV_LIB_DIR}/lib/libswscale.so"
-)
+add_subdirectory(${SHARED_DIR} ./shared)
+add_subdirectory(${DECODE_DIR} ./decode)
 include_directories("${OBOE_DIR}/include")
 include_directories("${COMMON_DIR}/include")
-include_directories("${YUV_LIB_DIR}/include")
+include_directories("${DECODE_DIR}/include")
 add_library(${PROJECT_NAME} SHARED ${MEDIE_SOURCES})
 
 # 链接依赖库
 target_link_libraries(${PROJECT_NAME} PRIVATE
-        avformat
-        avcodec
-        avfilter
-        avutil
-        swresample
-        swscale # 预编译库
         android
-        log
-        GLESv2
-        EGL
         oboe
         common
-
+        shared
+        decode
 )

@@ -16,12 +16,13 @@ static const JNINativeMethod nativeMethod[] = {
         // Java中的函数名                            函数签名信息                                         native的函数指针
         {"openStream",        "(Ljava/lang/String;)I",                                    (void *) (openStream)},
         {"closeStream",       "(Ljava/lang/String;)I",                                    (void *) (closeStream)},
+        {"screenshot",        "(Ljava/lang/String;Ljava/lang/String;)I",                  (void *) (screenshot)},
         {"creatSurface",      "(Ljava/lang/String;Ljava/lang/Object;II)I",                (void *) (creatSurface)},
         {"destorySurface",    "(Ljava/lang/String;)I",                                    (void *) (destorySurface)},
         {"changeSurfaceSize", "(Ljava/lang/String;II)I",                                  (void *) (changeSurfaceSize)},
         {"init",              "()I",                                                      (void *) (init)},
         {"creatM3u8File",     "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;", (void *) (creatM3u8File)},
-        {"m3u8ToMp4",     "(Ljava/lang/String;Ljava/lang/String;)I", (void *) (m3u8ToMp4)},
+        {"m3u8ToMp4",         "(Ljava/lang/String;Ljava/lang/String;)I",                  (void *) (m3u8ToMp4)},
 };
 MediaController *mediaController = NULL;
 // 类库加载时自动调用
@@ -130,6 +131,19 @@ JNIEXPORT jint JNICALL closeStream(JNIEnv *env, jobject thiz, jstring path) {
     if (NULL != mediaController) {
         std::string pStr = JStringToStdString(env, path);
         result = mediaController->closeStream(&pStr);
+    } else {
+        LOGE("mediaController is null");
+        result = -1;
+    }
+    return result;
+}
+JNIEXPORT jint JNICALL screenshot(JNIEnv *env, jobject thiz, jstring path, jstring imagePath) {
+    jint result = 0;
+    if (NULL != mediaController) {
+        std::string pStr = JStringToStdString(env, path);
+        std::string imageStr = JStringToStdString(env, imagePath);
+        LOGE("screenshot path %s", imageStr.c_str());
+        result = mediaController->screenshot(&pStr, &imageStr);
     } else {
         LOGE("mediaController is null");
         result = -1;

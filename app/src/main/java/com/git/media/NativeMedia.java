@@ -16,6 +16,8 @@ public class NativeMedia {
 
     public static native int closeStream(String path);
 
+    public static native int screenshot(String path,String imagePath);
+
     public static native int creatSurface(String path, Object surface, int w, int h);
 
     public static native int changeSurfaceSize(String path, int w, int h);

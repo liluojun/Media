@@ -30,6 +30,7 @@ project("medie")
 #add_subdirectory(decode)#添加子目录
 add_subdirectory(medie)
 #add_subdirectory(common)
+#add_subdirectory(shared)
 #add_subdirectory(yuv)
 # Specifies libraries CMake should link to your target library. You
 # can link libraries from various origins, such as libraries defined in this

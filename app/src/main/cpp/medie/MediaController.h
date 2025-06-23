@@ -5,15 +5,15 @@
 #ifndef MEDIA_MEDIACONTROLLER_H
 #define MEDIA_MEDIACONTROLLER_H
 
-#include "EncodeNakedStream.h"
-#include "FFmpegEncodeStream.h"
-#include "EncodeStream2.h"
-#include "native_log.h"
-#include "GlThread.h"
+#include "../decode/include/EncodeNakedStream.h"
+#include "../decode/include/FFmpegEncodeStream.h"
+#include "../decode/include/EncodeStream2.h"
+#include "../common/include/native_log.h"
+#include "../shared/include/GlThread.h"
 #include <cstring>
 #include <map>
-#include "FrameCallback.h"
-#include "Utils.cpp"
+#include "../decode/include/FrameCallback.h"
+#include "../common/src/Utils.cpp"
 #include <stdio.h>
 
 #ifdef __cplusplus
@@ -122,7 +122,7 @@ typedef struct {
 extern "C" {
 #include <string>
 #include "cJSON.h"
-#include "FFmpegStreamToMP4.h"
+#include "../decode/include/FFmpegStreamToMP4.h"
 #endif
 class MediaController {
 public:
@@ -139,6 +139,8 @@ public:
     int changeSurfaceSize(std::string *path, int w, int h);
 
     int closeStream(std::string *path);
+
+    int screenshot(std::string *path,std::string *imagePath);
 
 
     ~MediaController();

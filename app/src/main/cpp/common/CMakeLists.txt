@@ -18,6 +18,13 @@ set(LOCAL_PATH ${CMAKE_CURRENT_SOURCE_DIR})  # 等效于 $(call my-dir)
 
 set(MEDIE_SOURCES
         src/YuvData.cpp
+        src/cJSON.c
+        src/Utils.cpp
+        src/stb_image_write.cpp
 )
 include_directories("${LOCAL_PATH}/include")
 add_library(${PROJECT_NAME} SHARED ${MEDIE_SOURCES})
+target_link_libraries(${PROJECT_NAME} PRIVATE
+        log
+        android
+)

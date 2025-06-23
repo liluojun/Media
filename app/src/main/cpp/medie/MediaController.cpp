@@ -76,22 +76,35 @@ int MediaController::closeStream(std::string *path) {
     auto it = pathPlayerMap.find(*path);
     if (it != pathPlayerMap.end()) {
         if (it->second != nullptr) {
-            LOGE("11111")
             it->second->mFFmpegEncodeStream->closeStream();
-            LOGE("111112")
             delete (it->second->mFFmpegEncodeStream);
-            LOGE("111113")
             it->second->mGlThread->quit();
-            LOGE("1111144")
             delete (it->second->mGlThread);
-            LOGE("111115")
         } else {
             result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
-            LOGE("Player is null on changeSurfaceSize  path %s", path);
+            LOGE("Player is null on closeStream  path %s", path);
         }
     } else {
         result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
-        LOGE("Player for path %s not exists on changeSurfaceSize", path);
+        LOGE("Player for path %s not exists on closeStream", path);
+    }
+    return result;
+}
+
+int MediaController::screenshot(std::string *path, std::string *imagePath) {
+    int result = 0;
+    auto it = pathPlayerMap.find(*path);
+    if (it != pathPlayerMap.end()) {
+        if (it->second != nullptr) {
+            LOGE("Player is null on screenshot  path %s", imagePath->c_str());
+            it->second->mGlThread->postMessage(kMsgScreenShot,  new std::string(*imagePath));
+        } else {
+            result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
+            LOGE("Player is null on screenshot  path %s", path);
+        }
+    } else {
+        result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
+        LOGE("Player for path %s not exists on screenshot", path);
     }
     return result;
 }
@@ -163,7 +176,7 @@ const char *MediaController::creatM3u8File(std::string *path, const char *tsList
 
 int MediaController::m3u8ToMp4(const char *input_path, const char *output_path) {
     FFmpegStreamToMP4 *ffmpegStreamToMP4 = new FFmpegStreamToMP4();
-    ffmpegStreamToMP4->streamToMP4(input_path, output_path,NULL);
+    ffmpegStreamToMP4->streamToMP4(input_path, output_path, NULL);
     delete (ffmpegStreamToMP4);
     return 0;
 }
