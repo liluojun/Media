@@ -43,7 +43,6 @@ void videoThread(ReadContext *ctx) {
         }
         AVPacket *packet = ctx->videoReadDecode.front();
         ctx->videoReadDecode.pop();
-        LOGE("10*****videoReadDecode size=%d", ctx->videoReadDecode.size())
         pthread_mutex_unlock(&ctx->readVideoMutex);
         int ret = avcodec_send_packet(ctx->videoDecodeCtx->videoCodecCtx, packet);
         av_packet_free(&packet);

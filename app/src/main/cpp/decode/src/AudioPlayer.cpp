@@ -49,7 +49,6 @@ void AudioPlayer::stopPlayback() {
 
 // 外部写入 PCM 数据到缓冲区
 void AudioPlayer::writeData(const void *data, size_t size) {
-    LOGE("writeData")
     std::lock_guard<std::mutex> lock(mDataMutex);
     const uint8_t *src = static_cast<const uint8_t*>(data);
     mPCMBuffer.insert(mPCMBuffer.end(), src, src + size);

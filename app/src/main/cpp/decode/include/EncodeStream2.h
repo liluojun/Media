@@ -45,6 +45,10 @@ typedef struct ViedoDecodeContext {
         this->frameDuration = (frameRate > 0) ?
                               static_cast<int64_t>(1000000 / frameRate) : 40000; // 默认25fps
     }
+ void calculateFrameRateNaked() {
+        this->frameRate = 25;
+        this->frameDuration = 40000; // 默认25fps
+    }
 
     void init() {
         pthread_mutex_init(&viedoDecodeMutex, nullptr);
@@ -81,6 +85,7 @@ typedef struct AudioDecodeContext {
     std::thread audioRendderThread;
     AVRational user_time_base;
     int pts=0;
+    int sample_rate=8000;
     void init() {
         pthread_mutex_init(&audioDecodeMutex, nullptr);
         pthread_cond_init(&audioDecodeFullCond, nullptr);

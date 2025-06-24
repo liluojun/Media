@@ -13,8 +13,8 @@ bool parseHeader(const std::vector<uint8_t> &header, NakedFrameData *data) {
         data->width = *reinterpret_cast<const int16_t *>(&header[24]);
         data->height = *reinterpret_cast<const int16_t *>(&header[26]);
         data->data = new uint8_t[data->size];
-        LOGE("data->frametype=%d    data->size=%d    data->pts=%d", data->frametype, data->size,
-             data->pts)
+        /*LOGE("data->frametype=%d    data->size=%d    data->pts=%d", data->frametype, data->size,
+             data->pts)*/
         int codeId = *reinterpret_cast<const int8_t *>(&header[28]);
         switch (codeId) {
             case 0:
@@ -76,6 +76,7 @@ int initVideoAVCodec(InitContext *ctx, AVCodec *videoCodec, NakedFrameData *data
 void videoThread(InitContext *ctx) {
     AVCodec *videoCodec = nullptr;
     AVCodecID lastAVCodecID = AV_CODEC_ID_NONE;
+    ctx->videoDecodeCtx->calculateFrameRateNaked();
     while (!ctx->videoDecodeCtx->abortRequest) {
         pthread_mutex_lock(&ctx->readVideoMutex);
         while (ctx->videoReadDecode.empty() && !ctx->videoDecodeCtx->abortRequest) {
@@ -83,7 +84,6 @@ void videoThread(InitContext *ctx) {
         }
         NakedFrameData *packet = ctx->videoReadDecode.front();
         ctx->videoReadDecode.pop();
-        LOGE("10*****videoReadDecode size=%d", ctx->videoReadDecode.size())
         pthread_mutex_unlock(&ctx->readVideoMutex);
         int ret = initVideoAVCodec(ctx, videoCodec, packet, &lastAVCodecID);
         if (ret < 0) {
@@ -104,7 +104,6 @@ void videoThread(InitContext *ctx) {
         AVFrame *frame = av_frame_alloc();
         while (avcodec_receive_frame(ctx->videoDecodeCtx->videoCodecCtx, frame) == 0 &&
                !ctx->videoDecodeCtx->abortRequest) {
-            LOGE("avcodec_receive_frame")
             AVFrame *frameCopy = av_frame_clone(frame);
             pthread_mutex_lock(&ctx->videoDecodeCtx->viedoDecodeMutex);
             while (ctx->videoDecodeCtx->videoDecodeQueue.size() >=
@@ -151,16 +150,17 @@ void videoRenderThread(InitContext *ctx) {
             ctx->videoDecodeCtx->frame_count++;
         }
 
-        ctx->videoClock = pts;
-
-
+        ctx->videoClock = pts * AV_TIME_BASE;
+        LOGE("pts videoClock=%d   audioClock=%d ", ctx->videoClock, ctx->audioClock)
         // 计算动态帧间隔
         double adjustedInterval = (ctx->videoDecodeCtx->frameDuration / 1000000.0) *
                                   ctx->videoDecodeCtx->frameAdjustFactor;
         // 等待逻辑（带动态调整）
         auto now = Clock::now();
         double elapsed = std::chrono::duration<double>(now - lastRenderTime).count();
-        double remainingTime = 0.04;// adjustedInterval - elapsed;
+        LOGE("adjustedInterval =%f    elapsed=%f    adjustedInterval - elapsed=%f",
+             adjustedInterval, elapsed, adjustedInterval - elapsed)
+        double remainingTime = /*0.04;*/ adjustedInterval - elapsed;
         if (remainingTime > 0) {
             // 精确等待剩余时间（缩短等待）
             std::this_thread::sleep_for(std::chrono::duration<double>(remainingTime));
@@ -178,7 +178,6 @@ void videoRenderThread(InitContext *ctx) {
         if (ctx->videoDecodeCtx->frameCallback) {
             auto renderStart = Clock::now();
             ctx->videoDecodeCtx->frameCallback->onFrameEncoded(frame);
-            LOGE("onFrameEncoded")
             auto renderDuration = Clock::now() - renderStart;
 
             // 补偿渲染耗时
@@ -193,7 +192,7 @@ void videoRenderThread(InitContext *ctx) {
 }
 
 int initAudioAVCodec(InitContext *ctx, AVCodec *audioCodec, NakedFrameData *data) {
-    if (audioCodec != nullptr  ||
+    if (audioCodec != nullptr ||
         (ctx->audioDecodeCtx->audioDecodeCtx == nullptr)) {
         if (ctx->audioDecodeCtx->audioDecodeCtx != nullptr) {
             avcodec_free_context(&ctx->audioDecodeCtx->audioDecodeCtx);
@@ -215,7 +214,8 @@ int initAudioAVCodec(InitContext *ctx, AVCodec *audioCodec, NakedFrameData *data
         ctx->audioDecodeCtx->audioDecodeCtx->channel_layout = AV_CH_LAYOUT_MONO;
         ctx->audioDecodeCtx->audioDecodeCtx->sample_fmt = AV_SAMPLE_FMT_S16;
         ctx->audioPlayer->startPlayback(ctx->audioDecodeCtx->audioDecodeCtx->sample_rate,
-                                        ctx->audioDecodeCtx->audioDecodeCtx->channels,oboe::AudioFormat::I16 );
+                                        ctx->audioDecodeCtx->audioDecodeCtx->channels,
+                                        oboe::AudioFormat::I16);
         if (avcodec_open2(ctx->audioDecodeCtx->audioDecodeCtx, audioCodec, NULL) < 0) {
             avcodec_free_context(&ctx->audioDecodeCtx->audioDecodeCtx);
             ctx->audioInitFailClean();
@@ -234,7 +234,6 @@ void audioThread(InitContext *ctx) {
         }
         NakedFrameData *packet = ctx->audioReadDecode.front();
         ctx->audioReadDecode.pop();
-        LOGE("10*****videoReadDecode size=%d", ctx->audioReadDecode.size())
         pthread_mutex_unlock(&ctx->readAudioMutex);
         int ret = initAudioAVCodec(ctx, audioCodec, packet);
         if (ret < 0) {
@@ -255,7 +254,6 @@ void audioThread(InitContext *ctx) {
         AVFrame *frame = av_frame_alloc();
         while (avcodec_receive_frame(ctx->audioDecodeCtx->audioDecodeCtx, frame) == 0 &&
                !ctx->audioDecodeCtx->abortRequest) {
-            LOGE("avcodec_receive_frame")
             int data_size =
                     frame->nb_samples * av_get_bytes_per_sample((AVSampleFormat) frame->format) *
                     frame->channels;
@@ -264,7 +262,8 @@ void audioThread(InitContext *ctx) {
             memcpy(pcm_buffer, frame->data[0], data_size);
             nakedFrameData.data = pcm_buffer;
             nakedFrameData.size = data_size;
-            int64_t pts_increment_per_frame = data_size * AV_TIME_BASE / 8000;
+            int64_t pts_increment_per_frame =
+                    frame->nb_samples * AV_TIME_BASE / ctx->audioDecodeCtx->sample_rate;
             nakedFrameData.pts = ctx->audioDecodeCtx->pts;
             ctx->audioDecodeCtx->pts += pts_increment_per_frame;
             pthread_mutex_lock(&ctx->audioDecodeCtx->audioDecodeMutex);
@@ -294,6 +293,7 @@ void audioRenderThread(InitContext *ctx) {
         pthread_cond_signal(&ctx->audioDecodeCtx->audioDecodeFullCond);
         pthread_mutex_unlock(&ctx->audioDecodeCtx->audioDecodeMutex);
         ctx->audioClock = audioData.pts;// +
+        LOGE("pts* videoClock=%d   audioClock=%d ", ctx->videoClock, ctx->audioClock)
         if (ctx->audioPlayer) {
             ctx->audioPlayer->writeData(audioData.data, audioData.size);
         }

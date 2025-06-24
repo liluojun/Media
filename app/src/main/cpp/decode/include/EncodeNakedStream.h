@@ -62,8 +62,8 @@ typedef struct InitContext {
     pthread_cond_t readVideoCond;
     pthread_mutex_t readAudioMutex;
     pthread_cond_t readAudioCond;
-    int videoClock = 0;
-    int audioClock = 0;
+    int64_t videoClock = 0;
+    int64_t audioClock = 0;
 
     void audioInitFailClean() {
         pthread_mutex_lock(&readAudioMutex);
