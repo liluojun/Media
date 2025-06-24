@@ -10,6 +10,8 @@
 #include "VideoRender.h"
 #include "../../common/include/YuvData.h"
 #include "AiLineHelper.h"
+#include <thread>
+#include <vector>
 
 enum {
     kMsgSurfaceCreated,
@@ -22,12 +24,14 @@ enum {
 };
 typedef struct AiFrame {
     long timestamp;
-    AiLineData *data;
+    std::vector<AiLineData> data;
+
 };
 typedef struct ScreenShot {
     long timestamp;
     std::string *imagePath;
-} ;
+};
+
 class GlThread : public Looper {
 
 public:
@@ -43,13 +47,16 @@ private:
     VideoRender *mRender;
     AiFrame *mAiFrame;
     ScreenShot *mScreenShot;
-    int shareModel=1;//0填充模式，1等比缩放，2居中填充。
+    int shareModel = 1;//0填充模式，1等比缩放，2居中填充。
 
     void drawVideoFrames(RenderWindow *m, YuvData *pData, int arg1, int arg2);
 
     bool drawAiFrames(RenderWindow *m, int w, int h);
+
     void drawFboMix(RenderWindow *m, int w, int h);
-    void calculateScale(float contentW, float contentH, float viewW, float viewH, int fit, float outScale[2]);
+
+    void calculateScale(float contentW, float contentH, float viewW, float viewH, int fit,
+                        float outScale[2]);
 };
 
 

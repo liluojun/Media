@@ -3,8 +3,8 @@
 //
 
 #include "../include/GlDrawAi.h"
-
-
+#include "../include/AiLineHelper.h"
+static_assert(sizeof(AiLineData) > 0, "AiLineData must be a complete type");
 Shader
 GlDrawAi::prepareShader(std::string vertexShader, std::string fragmentShader, int w, int h) {
     if (shaders.count(fragmentShader) > 0) {
@@ -34,56 +34,33 @@ void GlDrawAi::release() {
     shaders.clear();
 }
 
-void GlDrawAi::drawAi(AiLineData *pData, int w, int h,int vw, int vh,float *scale) {
-    switch (pData->drawType) {
-        case LINE_SEGMENT: {
-            drawSegment(pData, w, h,vw,vh,scale);
-            break;
-        }
-            /*  case LINE_STRIP: {
-                  drawStrip(pData);
-                  break;
-              }
-              case LINE_LOOP: {
-                  drawLoop(pData);
-                  break;
-              }
-              case TEXT: {
-                  drawText(pData);
-                  break;
-              }
-              case RECTANGLE: {
-                  drawRectangle(pData);
-                  break;
-              }*/
-
-    }
-
-}
-
-void GlDrawAi::drawSegment(AiLineData *pData, int w, int h,int vw, int vh,float *scale) {
+void GlDrawAi::drawAi(std::vector<AiLineData> &pData, int w, int h, int vw, int vh, float *scale) {
     Shader mShader = prepareShader(AI_VERTEX_SHADER_STRING, AI_FRAGMENT_SHADER_STRING, vw, vh);
     glBindFramebuffer(GL_FRAMEBUFFER, mShader.glShader.getFBO());
     glViewport(0, 0, vw, vh);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     mShader.glShader.useProgram();
-    GLint result = mShader.glShader.setVertexAttribArray("vPosition", 3, 0, (pData->vertices));
-    if (result == -1) {
-        return;
-    }
-    GLint mColorHandle = mShader.glShader.getUniformLocation("vColor");
-    if (mColorHandle == -1) {
-        return;
-    }
-    int scaleLoc=mShader.glShader.getUniformLocation("scale");
-    if (scaleLoc != -1) {
-        glUniform2fv(scaleLoc, 1, scale);  // 传入float[2]的缩放值
-    }
+    for (const AiLineData& data : pData) {
+        GLint result = mShader.glShader.setVertexAttribArray("vPosition", 3, 0, (data.vertices));
+        if (result == -1) {
+            return;
+        }
+        GLint mColorHandle = mShader.glShader.getUniformLocation("vColor");
+        if (mColorHandle == -1) {
+            return;
+        }
+        int scaleLoc = mShader.glShader.getUniformLocation("scale");
+        if (scaleLoc != -1) {
+            glUniform2fv(scaleLoc, 1, scale);  // 传入float[2]的缩放值
+        }
 
-    glUniform4fv(mColorHandle, 1, pData->color);
-    glLineWidth(pData->lineWidth);
-    glDrawArrays(GL_LINES, 0, pData->buffer_size / 3);
-    glDisableVertexAttribArray(result);
+        glUniform4fv(mColorHandle, 1, data.color);
+        glLineWidth(data.lineWidth);
+        glDrawArrays(GL_LINES, 0, data.buffer_size / 3);
+        glDisableVertexAttribArray(result);
+    }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 }
+

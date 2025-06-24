@@ -7,6 +7,7 @@ import android.util.Log
 import android.view.Surface
 import android.view.TextureView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
@@ -62,6 +63,7 @@ class MainActivity : AppCompatActivity() {
         Log.e(TAG, "result =$result")
         findViewById<TextView>(R.id.t).setOnClickListener { NativeMedia.closeStream(path) }
         findViewById<TextView>(R.id.t1).setOnClickListener {
+            Toast.makeText(this, "保存成功", Toast.LENGTH_SHORT).show()
             picPath = "/storage/emulated/0/Android/data/com.git.media/files/${System.currentTimeMillis()}.png"
             NativeMedia.screenshot(path, picPath) }
     }

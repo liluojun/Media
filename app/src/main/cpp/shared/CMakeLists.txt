@@ -15,7 +15,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # 根据当前 ABI 动态获取预编译库路径
 set(LOCAL_PATH ${CMAKE_CURRENT_SOURCE_DIR})  # 等效于 $(call my-dir)
-
+include_directories("${LOCAL_PATH}/include")
 set(MEDIE_SOURCES
         src/AiLineHelper.cpp
         src/VideoRender.cpp
@@ -29,7 +29,7 @@ set(MEDIE_SOURCES
         src/Looper.cpp
 )
 
-include_directories("${LOCAL_PATH}/include")
+
 add_library(${PROJECT_NAME} SHARED ${MEDIE_SOURCES})
 target_link_libraries(${PROJECT_NAME} PRIVATE
         common

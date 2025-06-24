@@ -11,8 +11,9 @@ GlThread::GlThread() {
     mRender = new VideoRender();
     mAiFrame = new AiFrame();
     AiLineHelper *mAiLineHelper = new AiLineHelper();
-    mAiFrame->data = new AiLineData();
-    mAiLineHelper->creatAiLineData(mAiFrame->data);
+    AiLineData *data = new AiLineData();
+    mAiLineHelper->creatAiLineData(data);
+    (mAiFrame->data).push_back(*data);
     mAiFrame->timestamp = getTimestampMillis();
 
 }
@@ -55,55 +56,60 @@ void GlThread::handleMessage(LooperMessage *msg) {
                     if (result)
                         drawFboMix(mRender->m, msg->arg1,
                                    msg->arg2);
-                    mRender->m->mEglEnvironment->swapBuffers();
+
                     if (mScreenShot != NULL &&
                         mScreenShot->imagePath != nullptr &&
                         mScreenShot->timestamp + 1000 < getTimestampMillis()) {
                         //截图
-                        glFinish();  // 等待渲染完成
-                        LOGE("截图前 viewport、arg: %d x %d", msg->arg1, msg->arg2);
                         int viewport[4];
                         glGetIntegerv(GL_VIEWPORT, viewport);
-                        LOGE("viewport = x:%d y:%d w:%d h:%d", viewport[0], viewport[1],
-                             viewport[2], viewport[3]);
                         int width = viewport[2];
                         int height = viewport[3];
-                        uint8_t *pixels = new uint8_t[width * height * 4];
-                        glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-                        // 翻转 + 设置 alpha = 255
-                        for (int y = 0; y < height / 2; ++y) {
-                            for (int x = 0; x < width * 4; ++x) {
-                                std::swap(pixels[y * width * 4 + x],
-                                          pixels[(height - 1 - y) * width * 4 + x]);
-                            }
+                        std::unique_ptr<uint8_t[]> pixels(new uint8_t[width * height * 4]);
+                        glFinish();  // 等待渲染完成
+                        LOGE("截图前 glReadPixels");
+                        glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.get());
+                        LOGE("截图前 glReadPixels**");
+                        GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+                        if (status != GL_FRAMEBUFFER_COMPLETE) {
+                            LOGE("Framebuffer not complete: 0x%x", status);
                         }
-                        for (int i = 0; i < width * height; ++i) {
-                            pixels[i * 4 + 3] = 255;
-                        }
+                        // ✅ 马上将 pixels 拷贝交给后台线程
+                        std::unique_ptr<uint8_t[]> copy(new uint8_t[width * height * 4]);
+                        memcpy(copy.get(), pixels.get(), width * height * 4);
 
-                        LOGE(" screenshot write PNG to %s", mScreenShot->imagePath->c_str());
-                        // 后续保存为 PNG / 写文件 / 回调上层
-                        int success = stbi_write_png(mScreenShot->imagePath->c_str(), width, height,
-                                                     4, pixels, width * 4);
-                        if (!success) {
-                            LOGE(" screenshot Failed to write PNG to %s",
-                                 mScreenShot->imagePath->c_str());
-                        } else {
-                            LOGE(" screenshot success to %s", mScreenShot->imagePath->c_str());
-                        }
+                        std::string path = mScreenShot->imagePath->c_str();  // 拷贝路径，避免 dangling
+                        std::thread([pixels = std::move(copy), width, height, path]() {
+                            // 翻转 Y + alpha
+                            for (int y = 0; y < height / 2; ++y) {
+                                for (int x = 0; x < width * 4; ++x) {
+                                    std::swap(pixels[y * width * 4 + x],
+                                              pixels[(height - 1 - y) * width * 4 + x]);
+                                }
+                            }
+                            for (int i = 0; i < width * height; ++i)
+                                pixels[i * 4 + 3] = 255;
+
+                            int success = stbi_write_png(path.c_str(), width, height, 4,
+                                                         pixels.get(), width * 4);
+                            LOGE("截图前 glReadPixels******   %d  %s", success, path.c_str());
+                        }).detach();
+
                         delete mScreenShot;
                         mScreenShot = nullptr;
-                        delete[] pixels;
-                    }
 
+                    }
+                    mRender->m->mEglEnvironment->swapBuffers();
                     delete (msg->obj);
                 }
             }
             break;
         case kMsgAiFrame: {
             if (mAiFrame) {
-                mAiFrame->data = (AiLineData *) msg->obj;
+                AiLineData *pData = static_cast<AiLineData *>(msg->obj);
+                (mAiFrame->data).push_back(*pData);
                 mAiFrame->timestamp = getTimestampMillis();
+                delete (msg->obj);
             }
         }
         case kMsgScreenShot: {
@@ -129,10 +135,9 @@ void GlThread::drawVideoFrames(RenderWindow *m, YuvData *data, int w, int h) {
 }
 
 bool GlThread::drawAiFrames(RenderWindow *m, int w, int h) {
-    if (mAiFrame != nullptr && mAiFrame->data != nullptr) {
+    if (mAiFrame != nullptr && !mAiFrame->data.empty()) {
         if (getTimestampMillis() - mAiFrame->timestamp > 10000) {
-            delete (mAiFrame->data);
-            mAiFrame->data = nullptr;
+            mAiFrame->data.clear();
             mAiFrame->timestamp = 0;
             return false;
         } else {

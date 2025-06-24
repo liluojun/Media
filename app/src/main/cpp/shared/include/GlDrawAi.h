@@ -15,6 +15,7 @@
 #include "Shader.h"
 #include "GlShaderText.h"
 #include "AiLineHelper.h"
+#include <vector>
 
 class GlDrawAi {
     std::map<std::string, Shader> shaders;
@@ -24,11 +25,9 @@ class GlDrawAi {
     GLint fboTextureId;
 
 public:
-    void drawAi(AiLineData *pData, int w, int h,int vw, int vh,float *scale);
+    void drawAi(std::vector<AiLineData> &pData, int w, int h,int vw, int vh,float *scale);
 
     void release();
-
-    void drawSegment(AiLineData *pData, int w, int h,int vw, int vh,float *scale);
 
     GLint getFboTexture();
 };
