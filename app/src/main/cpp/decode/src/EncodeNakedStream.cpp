@@ -121,7 +121,7 @@ void videoThread(InitContext *ctx) {
 
 void videoRenderThread(InitContext *ctx) {
     using Clock = std::chrono::high_resolution_clock;
-    Clock::time_point lastRenderTime = Clock::now();
+    //Clock::time_point lastRenderTime = Clock::now();
     while (!ctx->videoDecodeCtx->renderRequest) {
         pthread_mutex_lock(&ctx->videoDecodeCtx->viedoDecodeMutex);
         while (ctx->videoDecodeCtx->videoDecodeQueue.empty() &&
@@ -133,6 +133,7 @@ void videoRenderThread(InitContext *ctx) {
             pthread_mutex_unlock(&ctx->videoDecodeCtx->viedoDecodeMutex);
             break;
         }
+
         AVFrame *frame = ctx->videoDecodeCtx->videoDecodeQueue.front();
         ctx->videoDecodeCtx->videoDecodeQueue.pop();
 
@@ -149,8 +150,12 @@ void videoRenderThread(InitContext *ctx) {
             frame->pts = ctx->videoDecodeCtx->frame_count;
             ctx->videoDecodeCtx->frame_count++;
         }
-
-        ctx->videoClock = pts * AV_TIME_BASE;
+        if (!ctx->videoDecodeCtx->syncClockInitialized) {
+            ctx->syncClock->init((int64_t)(pts * AV_TIME_BASE));
+            ctx->videoDecodeCtx->syncClockInitialized = true;
+            LOGE("首次渲染视频帧，系统时间基准建立");
+        }
+        /*ctx->videoClock = pts * AV_TIME_BASE;
         LOGE("pts videoClock=%d   audioClock=%d ", ctx->videoClock, ctx->audioClock)
         // 计算动态帧间隔
         double adjustedInterval = (ctx->videoDecodeCtx->frameDuration / 1000000.0) *
@@ -160,7 +165,7 @@ void videoRenderThread(InitContext *ctx) {
         double elapsed = std::chrono::duration<double>(now - lastRenderTime).count();
         LOGE("adjustedInterval =%f    elapsed=%f    adjustedInterval - elapsed=%f",
              adjustedInterval, elapsed, adjustedInterval - elapsed)
-        double remainingTime = /*0.04;*/ adjustedInterval - elapsed;
+        double remainingTime =  adjustedInterval - elapsed;
         if (remainingTime > 0) {
             // 精确等待剩余时间（缩短等待）
             std::this_thread::sleep_for(std::chrono::duration<double>(remainingTime));
@@ -173,17 +178,24 @@ void videoRenderThread(InitContext *ctx) {
                 dropCounter = 0;
                 continue;
             }
+        }*/
+        int64_t framePtsUs = (int64_t)(pts * AV_TIME_BASE);
+
+        if (!ctx->syncClock->shouldRenderVideo(framePtsUs)) {
+            std::this_thread::sleep_for(std::chrono::microseconds(
+                    framePtsUs - ctx->syncClock->getVideoPlayTimeUs()));
         }
+
         // 执行渲染
         if (ctx->videoDecodeCtx->frameCallback) {
-            auto renderStart = Clock::now();
+           // auto renderStart = Clock::now();
             ctx->videoDecodeCtx->frameCallback->onFrameEncoded(frame);
-            auto renderDuration = Clock::now() - renderStart;
+            //auto renderDuration = Clock::now() - renderStart;
 
             // 补偿渲染耗时
-            lastRenderTime = Clock::now() + renderDuration;
+           // lastRenderTime = Clock::now() + renderDuration;
         } else {
-            lastRenderTime = Clock::now();
+           // lastRenderTime = Clock::now();
         }
 
         av_frame_free(&frame);
@@ -294,6 +306,16 @@ void audioRenderThread(InitContext *ctx) {
         pthread_mutex_unlock(&ctx->audioDecodeCtx->audioDecodeMutex);
         ctx->audioClock = audioData.pts;// +
         LOGE("pts* videoClock=%d   audioClock=%d ", ctx->videoClock, ctx->audioClock)
+        int64_t deltaUs = ctx->syncClock->syncAudio(audioData.pts);
+        if (deltaUs > 300000) {
+            // 提前太多，sleep
+            std::this_thread::sleep_for(std::chrono::microseconds(deltaUs));
+        } else if (deltaUs < -150000) {
+            // 落后太多，丢弃
+            LOGW("drop audio");
+            av_free(audioData.data);
+            continue;
+        }
         if (ctx->audioPlayer) {
             ctx->audioPlayer->writeData(audioData.data, audioData.size);
         }
@@ -372,6 +394,7 @@ bool EncodeNakedStream::openStream(const char *filePath) {
         decodeCtx->filePath = av_strdup(filePath);
         decodeCtx->videoDecodeCtx = new VideoDecodeContext();
         decodeCtx->videoDecodeCtx->init();
+        decodeCtx->syncClock = std::make_shared<AVSyncClock>();
         decodeCtx->audioDecodeCtx = new AudioDecodeContext();
         decodeCtx->audioDecodeCtx->init();
         decodeCtx->videoDecodeCtx->frameCallback = frameCallback;

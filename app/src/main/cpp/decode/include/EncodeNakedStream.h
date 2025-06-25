@@ -30,7 +30,7 @@ extern "C" {
 #include "../ffmpeg/include/libavformat/avformat.h"
 #include "../ffmpeg/include/libavcodec/avcodec.h"
 #include "../ffmpeg/include/libswresample/swresample.h"
-
+#include "AVSyncClock.h"
 #endif
 typedef struct NakedFrameData {
     uint8_t *data;
@@ -64,7 +64,7 @@ typedef struct InitContext {
     pthread_cond_t readAudioCond;
     int64_t videoClock = 0;
     int64_t audioClock = 0;
-
+    std::shared_ptr<AVSyncClock> syncClock;
     void audioInitFailClean() {
         pthread_mutex_lock(&readAudioMutex);
         while (!audioReadDecode.empty()) {

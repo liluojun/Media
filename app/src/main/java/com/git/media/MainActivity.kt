@@ -15,7 +15,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         val TAG = "MainActivity"
         val path =
-            "/storage/emulated/0/Android/data/com.git.media/files/1.ts"// "/storage/emulated/0/Android/data/com.git.media/files/creat.m3u8"
+            "/storage/emulated/0/Android/data/com.git.media/files/4.ts"// "/storage/emulated/0/Android/data/com.git.media/files/creat.m3u8"
         var goodPath: String? = null;
         val json =
             "[{\"time\":10.0,\"url\":\"video_0.ts\"},{\"time\":2.08,\"url\":\"video_1.ts\"}]"

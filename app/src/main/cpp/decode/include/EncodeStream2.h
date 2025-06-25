@@ -40,6 +40,7 @@ typedef struct ViedoDecodeContext {
     FrameCallback *frameCallback = nullptr;
     AVRational user_time_base;
     int frame_count;
+    bool syncClockInitialized = false;
     void calculateFrameRate(AVStream *stream) {
         this->frameRate = av_q2d(stream->avg_frame_rate);
         this->frameDuration = (frameRate > 0) ?

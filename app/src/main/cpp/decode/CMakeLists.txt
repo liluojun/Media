@@ -23,6 +23,7 @@ set(MEDIE_SOURCES
         src/EncodeNakedStream.cpp
         src/FFmpegStreamToMP4.cpp
         src/AudioPlayer.cpp
+        src/AVSyncClock.cpp
 )
 
 # 添加预编译的 so
