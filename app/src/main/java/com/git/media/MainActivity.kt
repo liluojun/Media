@@ -22,6 +22,8 @@ class MainActivity : AppCompatActivity() {
         var picPath = "/storage/emulated/0/Android/data/com.git.media/files/${System.currentTimeMillis()}.png"
     }
 
+    var width: Int = 0
+    var height: Int = 0
     fun dip2px(context: Context, dpValue: Float): Int {
         val scale = context.resources.displayMetrics.density
         return (dpValue * scale + 0.5f).toInt()
@@ -40,8 +42,8 @@ class MainActivity : AppCompatActivity() {
         var tv = findViewById<TextureView>(R.id.tv)
         tv.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-                NativeMedia.creatSurface(path, Surface(surface), width, height)
-
+                this@MainActivity.width = width
+                this@MainActivity.height = height
             }
 
             override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
@@ -57,15 +59,21 @@ class MainActivity : AppCompatActivity() {
 
             }
         }
-        if (result == 0) {
-            NativeMedia.openStream(path)
-        }
+
         Log.e(TAG, "result =$result")
-        findViewById<TextView>(R.id.t).setOnClickListener { NativeMedia.closeStream(path) }
-        findViewById<TextView>(R.id.t1).setOnClickListener {
+        findViewById<TextView>(R.id.t).setOnClickListener {
+            if (result == 0) {
+                NativeMedia.openStream(path)
+                NativeMedia.creatSurface(path, Surface(tv.surfaceTexture), width, height)
+            }
+        }
+        findViewById<TextView>(R.id.t1).setOnClickListener { NativeMedia.closeStream(path) }
+        findViewById<TextView>(R.id.t2).setOnClickListener { NativeMedia.playbackSpeed(path, 2.0)}
+        findViewById<TextView>(R.id.t3).setOnClickListener {
             Toast.makeText(this, "保存成功", Toast.LENGTH_SHORT).show()
             picPath = "/storage/emulated/0/Android/data/com.git.media/files/${System.currentTimeMillis()}.png"
-            NativeMedia.screenshot(path, picPath) }
+            NativeMedia.screenshot(path, picPath)
+        }
     }
 
     override fun onDestroy() {

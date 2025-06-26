@@ -140,7 +140,9 @@ public:
 
     int closeStream(std::string *path);
 
-    int screenshot(std::string *path,std::string *imagePath);
+    int playbackSpeed(std::string *path, double speed);
+
+    int screenshot(std::string *path, std::string *imagePath);
 
 
     ~MediaController();

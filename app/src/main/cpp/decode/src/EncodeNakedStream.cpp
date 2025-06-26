@@ -120,8 +120,6 @@ void videoThread(InitContext *ctx) {
 }
 
 void videoRenderThread(InitContext *ctx) {
-    using Clock = std::chrono::high_resolution_clock;
-    //Clock::time_point lastRenderTime = Clock::now();
     while (!ctx->videoDecodeCtx->renderRequest) {
         pthread_mutex_lock(&ctx->videoDecodeCtx->viedoDecodeMutex);
         while (ctx->videoDecodeCtx->videoDecodeQueue.empty() &&
@@ -151,51 +149,22 @@ void videoRenderThread(InitContext *ctx) {
             ctx->videoDecodeCtx->frame_count++;
         }
         if (!ctx->videoDecodeCtx->syncClockInitialized) {
-            ctx->syncClock->init((int64_t)(pts * AV_TIME_BASE));
+            ctx->syncClock->init((int64_t) (pts * AV_TIME_BASE));
             ctx->videoDecodeCtx->syncClockInitialized = true;
             LOGE("首次渲染视频帧，系统时间基准建立");
         }
-        /*ctx->videoClock = pts * AV_TIME_BASE;
-        LOGE("pts videoClock=%d   audioClock=%d ", ctx->videoClock, ctx->audioClock)
-        // 计算动态帧间隔
-        double adjustedInterval = (ctx->videoDecodeCtx->frameDuration / 1000000.0) *
-                                  ctx->videoDecodeCtx->frameAdjustFactor;
-        // 等待逻辑（带动态调整）
-        auto now = Clock::now();
-        double elapsed = std::chrono::duration<double>(now - lastRenderTime).count();
-        LOGE("adjustedInterval =%f    elapsed=%f    adjustedInterval - elapsed=%f",
-             adjustedInterval, elapsed, adjustedInterval - elapsed)
-        double remainingTime =  adjustedInterval - elapsed;
-        if (remainingTime > 0) {
-            // 精确等待剩余时间（缩短等待）
-            std::this_thread::sleep_for(std::chrono::duration<double>(remainingTime));
-        } else {
-            // 连续超时触发追赶
-            static int dropCounter = 0;
-            if (++dropCounter >= 2) {
-                LOGE("av_frame_free")
-                av_frame_free(&frame);
-                dropCounter = 0;
-                continue;
-            }
-        }*/
-        int64_t framePtsUs = (int64_t)(pts * AV_TIME_BASE);
 
+        int64_t framePtsUs = (int64_t) (pts * AV_TIME_BASE);
+        ctx->videoClock = framePtsUs;
         if (!ctx->syncClock->shouldRenderVideo(framePtsUs)) {
             std::this_thread::sleep_for(std::chrono::microseconds(
-                    framePtsUs - ctx->syncClock->getVideoPlayTimeUs()));
+                    (framePtsUs - ctx->syncClock->getVideoPlayTimeUs())) /
+                                        ctx->syncClock->getPlaybackSpeed());
         }
 
         // 执行渲染
         if (ctx->videoDecodeCtx->frameCallback) {
-           // auto renderStart = Clock::now();
             ctx->videoDecodeCtx->frameCallback->onFrameEncoded(frame);
-            //auto renderDuration = Clock::now() - renderStart;
-
-            // 补偿渲染耗时
-           // lastRenderTime = Clock::now() + renderDuration;
-        } else {
-           // lastRenderTime = Clock::now();
         }
 
         av_frame_free(&frame);
@@ -305,12 +274,14 @@ void audioRenderThread(InitContext *ctx) {
         pthread_cond_signal(&ctx->audioDecodeCtx->audioDecodeFullCond);
         pthread_mutex_unlock(&ctx->audioDecodeCtx->audioDecodeMutex);
         ctx->audioClock = audioData.pts;// +
-        LOGE("pts* videoClock=%d   audioClock=%d ", ctx->videoClock, ctx->audioClock)
         int64_t deltaUs = ctx->syncClock->syncAudio(audioData.pts);
-        if (deltaUs > 300000) {
+        LOGE("pts* videoClock=%d   audioClock=%d deltaUs=%d", ctx->videoClock, ctx->audioClock,
+             deltaUs)
+        if (deltaUs > ctx->syncClock->getSleepThresholdUs()) {
             // 提前太多，sleep
-            std::this_thread::sleep_for(std::chrono::microseconds(deltaUs));
-        } else if (deltaUs < -150000) {
+            std::this_thread::sleep_for(std::chrono::microseconds(
+                    static_cast<int64_t>(deltaUs / ctx->syncClock->getPlaybackSpeed())));
+        } else if (deltaUs < ctx->syncClock->getDropThresholdUs()) {
             // 落后太多，丢弃
             LOGW("drop audio");
             av_free(audioData.data);
@@ -427,6 +398,15 @@ void EncodeNakedStream::setFrameCallback(FrameCallback *callback) {
     frameCallback = callback;
     if (decodeCtx && decodeCtx->videoDecodeCtx) {
         decodeCtx->videoDecodeCtx->frameCallback = callback;
+    }
+}
+
+bool EncodeNakedStream::playbackSpeed(double speed) {
+    if (decodeCtx && decodeCtx->syncClock) {
+        decodeCtx->syncClock->setPlaybackSpeed(speed);
+        return true;
+    } else {
+        return false;
     }
 }
 

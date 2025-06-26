@@ -65,6 +65,7 @@ typedef struct InitContext {
     int64_t videoClock = 0;
     int64_t audioClock = 0;
     std::shared_ptr<AVSyncClock> syncClock;
+
     void audioInitFailClean() {
         pthread_mutex_lock(&readAudioMutex);
         while (!audioReadDecode.empty()) {
@@ -118,6 +119,8 @@ public:
     void addFrame(uint8_t *frame, int type);
 
     void setFrameCallback(FrameCallback *callback);
+
+    bool playbackSpeed(double speed);
 
     void closeStream();
 };

@@ -23,6 +23,7 @@ static const JNINativeMethod nativeMethod[] = {
         {"init",              "()I",                                                      (void *) (init)},
         {"creatM3u8File",     "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;", (void *) (creatM3u8File)},
         {"m3u8ToMp4",         "(Ljava/lang/String;Ljava/lang/String;)I",                  (void *) (m3u8ToMp4)},
+        {"playbackSpeed",     "(Ljava/lang/String;D)I",                                   (void *) (playbackSpeed)},
 };
 MediaController *mediaController = NULL;
 // 类库加载时自动调用
@@ -131,6 +132,17 @@ JNIEXPORT jint JNICALL closeStream(JNIEnv *env, jobject thiz, jstring path) {
     if (NULL != mediaController) {
         std::string pStr = JStringToStdString(env, path);
         result = mediaController->closeStream(&pStr);
+    } else {
+        LOGE("mediaController is null");
+        result = -1;
+    }
+    return result;
+}
+JNIEXPORT jint JNICALL playbackSpeed(JNIEnv *env, jobject thiz, jstring path, jdouble speed) {
+    jint result = 0;
+    if (NULL != mediaController) {
+        std::string pStr = JStringToStdString(env, path);
+        result = mediaController->playbackSpeed(&pStr, speed);
     } else {
         LOGE("mediaController is null");
         result = -1;

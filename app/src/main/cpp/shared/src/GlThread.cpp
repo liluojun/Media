@@ -57,9 +57,7 @@ void GlThread::handleMessage(LooperMessage *msg) {
                         drawFboMix(mRender->m, msg->arg1,
                                    msg->arg2);
 
-                    if (mScreenShot != NULL &&
-                        mScreenShot->imagePath != nullptr &&
-                        mScreenShot->timestamp + 1000 < getTimestampMillis()) {
+                    if (mScreenShot != NULL && mScreenShot->imagePath != nullptr && mScreenShot->timestamp + 1000 < getTimestampMillis()) {
                         //截图
                         int viewport[4];
                         glGetIntegerv(GL_VIEWPORT, viewport);

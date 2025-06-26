@@ -7,6 +7,7 @@
     tools:context=".MainActivity">
 
     <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/video"
         android:layout_width="match_parent"
         android:layout_height="150dp"
         android:background="@color/black"
@@ -28,7 +29,20 @@
 
     <TextView
         android:id="@+id/t"
-        android:layout_width="120dp"
+        android:layout_width="80dp"
+        android:layout_height="50dp"
+        android:layout_marginLeft="8dp"
+        android:layout_marginBottom="8dp"
+        android:background="@color/base_color"
+        android:gravity="center"
+        android:text="开播"
+        android:textColor="@color/white"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/video" />
+
+    <TextView
+        android:id="@+id/t1"
+        android:layout_width="80dp"
         android:layout_height="50dp"
         android:layout_marginLeft="8dp"
         android:layout_marginBottom="8dp"
@@ -36,12 +50,25 @@
         android:gravity="center"
         android:text="关闭"
         android:textColor="@color/white"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintLeft_toLeftOf="parent" />
+        app:layout_constraintLeft_toRightOf="@id/t"
+        app:layout_constraintTop_toTopOf="@id/t" />
 
     <TextView
-        android:id="@+id/t1"
-        android:layout_width="120dp"
+        android:id="@+id/t2"
+        android:layout_width="80dp"
+        android:layout_height="50dp"
+        android:layout_marginLeft="8dp"
+        android:layout_marginBottom="8dp"
+        android:background="@color/base_color"
+        android:gravity="center"
+        android:text="2x"
+        android:textColor="@color/white"
+        app:layout_constraintLeft_toRightOf="@id/t1"
+        app:layout_constraintTop_toTopOf="@id/t" />
+
+    <TextView
+        android:id="@+id/t3"
+        android:layout_width="80dp"
         android:layout_height="50dp"
         android:layout_marginLeft="8dp"
         android:layout_marginBottom="8dp"
@@ -49,6 +76,6 @@
         android:gravity="center"
         android:text="截图"
         android:textColor="@color/white"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintLeft_toRightOf="@id/t" />
+        app:layout_constraintLeft_toRightOf="@id/t2"
+        app:layout_constraintTop_toTopOf="@id/t" />
 </androidx.constraintlayout.widget.ConstraintLayout>

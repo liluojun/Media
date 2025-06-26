@@ -78,15 +78,37 @@ int MediaController::closeStream(std::string *path) {
         if (it->second != nullptr) {
             it->second->mFFmpegEncodeStream->closeStream();
             delete (it->second->mFFmpegEncodeStream);
+            it->second->mFFmpegEncodeStream = nullptr;
             it->second->mGlThread->quit();
             delete (it->second->mGlThread);
+            it->second->mGlThread = nullptr;
+            delete it->second;
+            it->second = nullptr;
         } else {
             result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
             LOGE("Player is null on closeStream  path %s", path);
         }
+        pathPlayerMap.erase(it);
     } else {
         result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
         LOGE("Player for path %s not exists on closeStream", path);
+    }
+    return result;
+}
+
+int MediaController::playbackSpeed(std::string *path, double speed) {
+    int result = 0;
+    auto it = pathPlayerMap.find(*path);
+    if (it != pathPlayerMap.end()) {
+        if (it->second != nullptr) {
+            it->second->mFFmpegEncodeStream->playbackSpeed(speed);
+        } else {
+            result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
+            LOGE("Player is null on playbackSpeed  path %s", path);
+        }
+    } else {
+        result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
+        LOGE("Player for path %s not exists on playbackSpeed", path);
     }
     return result;
 }
@@ -97,7 +119,7 @@ int MediaController::screenshot(std::string *path, std::string *imagePath) {
     if (it != pathPlayerMap.end()) {
         if (it->second != nullptr) {
             LOGE("Player is null on screenshot  path %s", imagePath->c_str());
-            it->second->mGlThread->postMessage(kMsgScreenShot,  new std::string(*imagePath));
+            it->second->mGlThread->postMessage(kMsgScreenShot, new std::string(*imagePath));
         } else {
             result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
             LOGE("Player is null on screenshot  path %s", path);
