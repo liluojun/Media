@@ -24,6 +24,7 @@ set(MEDIE_SOURCES
         src/FFmpegStreamToMP4.cpp
         src/AudioPlayer.cpp
         src/AVSyncClock.cpp
+        src/sonic.c
 )
 
 # 添加预编译的 so

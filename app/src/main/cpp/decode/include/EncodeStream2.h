@@ -6,7 +6,8 @@
 #define MEDIA_ENCODESTREAM2_H
 
 #ifdef __cplusplus
-
+#define AUDIO_SAMPLE_RATE 8000
+#define AUDIO_CHANNELS 1
 #include <chrono>
 #include <thread>
 #include <queue>
@@ -20,7 +21,7 @@ extern "C" {
 #include "../ffmpeg/include/libavformat/avformat.h"
 #include "../ffmpeg/include/libavcodec/avcodec.h"
 #include "../ffmpeg/include/libswresample/swresample.h"
-
+#include "sonic.h"
 #endif
 
 typedef struct ViedoDecodeContext {
@@ -87,15 +88,20 @@ typedef struct AudioDecodeContext {
     AVRational user_time_base;
     int pts=0;
     int sample_rate=8000;
+    sonicStream sonicStream= nullptr;
     void init() {
         pthread_mutex_init(&audioDecodeMutex, nullptr);
         pthread_cond_init(&audioDecodeFullCond, nullptr);
         pthread_cond_init(&audioDecodeEmptyCond, nullptr);
+        sonicStream = sonicCreateStream(AUDIO_SAMPLE_RATE, AUDIO_CHANNELS);
+        sonicSetPitch(sonicStream, 1.0f);
     };
 
     ~AudioDecodeContext() {
         abortRequest = true;
         playRequest = true;
+        sonicDestroyStream(sonicStream);
+        sonicStream = nullptr;
         pthread_cond_signal(&audioDecodeFullCond);
         pthread_cond_signal(&audioDecodeEmptyCond);
         if (audioDecodeCtx) {

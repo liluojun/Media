@@ -9,6 +9,7 @@
 #include <mutex>
 #include <chrono>
 #include <algorithm>
+#include "../../common/include/native_log.h"
 // AVSyncClock.h
 
 class AVSyncClock {
@@ -30,7 +31,7 @@ public:
     int64_t getDropThresholdUs() const;
 
 private:
-    std::mutex mtx;
+    mutable std::mutex mtx;
     int64_t baseVideoPtsUs = 0;
     std::chrono::high_resolution_clock::time_point baseSysTime;
     bool initialized = false;

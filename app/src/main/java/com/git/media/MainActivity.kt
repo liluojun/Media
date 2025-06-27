@@ -65,6 +65,7 @@ class MainActivity : AppCompatActivity() {
             if (result == 0) {
                 NativeMedia.openStream(path)
                 NativeMedia.creatSurface(path, Surface(tv.surfaceTexture), width, height)
+               // NativeMedia.playbackSpeed(path, 2.0)
             }
         }
         findViewById<TextView>(R.id.t1).setOnClickListener { NativeMedia.closeStream(path) }

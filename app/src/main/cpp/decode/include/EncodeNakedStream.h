@@ -31,6 +31,7 @@ extern "C" {
 #include "../ffmpeg/include/libavcodec/avcodec.h"
 #include "../ffmpeg/include/libswresample/swresample.h"
 #include "AVSyncClock.h"
+#include "sonic.h"
 #endif
 typedef struct NakedFrameData {
     uint8_t *data;
