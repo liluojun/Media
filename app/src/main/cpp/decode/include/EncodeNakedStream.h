@@ -40,6 +40,12 @@ extern "C" {
 #include <cstdint>
 #include <algorithm>
 #endif
+struct CodecExtraData {
+    std::vector<uint8_t> vps;
+    std::vector<uint8_t> sps;
+    std::vector<uint8_t> pps;
+};
+
 typedef struct NakedFrameData {
     uint8_t *data;
     int size;
