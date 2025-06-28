@@ -22,6 +22,9 @@
 #include <stdexcept>
 #include <dirent.h>
 #include "FrameType.h"
+#include <vector>
+#include <cstring>
+#include <arpa/inet.h>
 
 using namespace std;
 extern "C" {
@@ -30,8 +33,12 @@ extern "C" {
 #include "../ffmpeg/include/libavformat/avformat.h"
 #include "../ffmpeg/include/libavcodec/avcodec.h"
 #include "../ffmpeg/include/libswresample/swresample.h"
+#include "../ffmpeg/include/libavutil/error.h"
 #include "AVSyncClock.h"
 #include "sonic.h"
+#include <vector>
+#include <cstdint>
+#include <algorithm>
 #endif
 typedef struct NakedFrameData {
     uint8_t *data;
@@ -65,6 +72,7 @@ typedef struct InitContext {
     pthread_cond_t readAudioCond;
     int64_t videoClock = 0;
     int64_t audioClock = 0;
+    bool isSoftOrHardDecod= true;
     std::shared_ptr<AVSyncClock> syncClock;
 
     void audioInitFailClean() {

@@ -29,11 +29,15 @@ add_subdirectory(${OBOE_DIR} ./oboe)
 add_subdirectory(${COMMON_DIR} ./common)
 add_subdirectory(${SHARED_DIR} ./shared)
 add_subdirectory(${DECODE_DIR} ./decode)
-include_directories("${OBOE_DIR}/include")
-include_directories("${COMMON_DIR}/include")
-include_directories("${DECODE_DIR}/include")
-add_library(${PROJECT_NAME} SHARED ${MEDIE_SOURCES})
 
+add_library(${PROJECT_NAME} SHARED ${MEDIE_SOURCES})
+target_include_directories(${PROJECT_NAME} PRIVATE
+        ${OBOE_DIR}/include
+        ${COMMON_DIR}/include
+        ${SHARED_DIR}/include
+        ${DECODE_DIR}/include
+        ${DECODE_DIR}/ffmpeg/include   # 加这一行
+)
 # 链接依赖库
 target_link_libraries(${PROJECT_NAME} PRIVATE
         android

@@ -108,7 +108,8 @@ FFmpegStreamToMP4::streamToMP4(const char *input_path, const char *output_path, 
     }
 
     // 流映射处理
-    streams = static_cast<int *>(av_mallocz_array(input_context->nb_streams, sizeof(int)));
+    streams = static_cast<int *>(av_malloc_array(input_context->nb_streams, sizeof(int)));
+    if(streams){ memset(streams, 0, input_context->nb_streams * sizeof(int));}
     for (int i = 0; i < input_context->nb_streams; ++i) {
         AVStream *in_stream = input_context->streams[i];
         AVCodecParameters *in_codecpar = in_stream->codecpar;

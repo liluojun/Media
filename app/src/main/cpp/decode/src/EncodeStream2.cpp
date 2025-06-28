@@ -8,7 +8,7 @@ void videoThread(ReadContext *ctx) {
     while (ctx->videoStreamIndex == -1 && !ctx->videoDecodeCtx->abortRequest) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
-    AVCodec *videoCodec = avcodec_find_decoder(
+    const AVCodec *videoCodec = avcodec_find_decoder(
             ctx->formatCtx->streams[ctx->videoStreamIndex]->codecpar->codec_id);
     if (!videoCodec) {
         LOGE("Video codec not found");
@@ -134,7 +134,7 @@ void audioThread(ReadContext *ctx) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
     SwrContext *swr_ctx = nullptr;//音频重采样
-    AVCodec *audioCodec = avcodec_find_decoder(
+    const AVCodec *audioCodec = avcodec_find_decoder(
             ctx->formatCtx->streams[ctx->audioStreamIndex]->codecpar->codec_id);
     if (!audioCodec) {
         LOGE("audioCodec codec not found");

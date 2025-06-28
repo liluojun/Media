@@ -56,6 +56,15 @@ typedef struct {
          */
         void onFrameEncoded(AVFrame *mAVFrame) override {
             if (glThread && glThread->getIsSurfaceCreated() && mAVFrame) {
+                if (!mAVFrame->data[0] || !mAVFrame->data[1] || !mAVFrame->data[2]) {
+                    LOGE("Error: AVFrame data pointers null");
+                    return;
+                }
+                if (mAVFrame->linesize[0] <= 0 || mAVFrame->linesize[1] <= 0 || mAVFrame->linesize[2] <= 0) {
+                    LOGE("Error: AVFrame linesize invalid");
+                    return;
+                }
+
                 // 创建YUV数据对象
                 YuvData *yuvData = new YuvData();
 
@@ -123,6 +132,8 @@ extern "C" {
 #include <string>
 #include "cJSON.h"
 #include "../decode/include/FFmpegStreamToMP4.h"
+#include "../decode/ffmpeg/include/libavutil/frame.h"
+
 #endif
 class MediaController {
 public:

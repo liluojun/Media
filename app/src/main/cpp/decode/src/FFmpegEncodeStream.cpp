@@ -55,7 +55,7 @@ bool extractSEIData(const uint8_t *data, int size, uint8_t **seiData, int *seiSi
 
 void *decodeThread(void *arg) {
     DecodeContext *ctx = static_cast<DecodeContext *>(arg);
-    AVCodec *videoCodec = nullptr, *audioCodec = nullptr;
+    const AVCodec *videoCodec = nullptr, *audioCodec = nullptr;
     SwrContext *swr_ctx = nullptr;//音频重采样
     // 打开输入文件
     if (avformat_open_input(&ctx->formatCtx, ctx->filePath, nullptr, nullptr) != 0) {

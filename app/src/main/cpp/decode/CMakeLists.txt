@@ -16,7 +16,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # 根据当前 ABI 动态获取预编译库路径
 set(LOCAL_PATH ${CMAKE_CURRENT_SOURCE_DIR})  # 等效于 $(call my-dir)
 set(YUV_LIB_DIR "${LOCAL_PATH}/ffmpeg/${ANDROID_ABI}")
-
 set(MEDIE_SOURCES
         src/FFmpegEncodeStream.cpp
         src/EncodeStream2.cpp
@@ -53,10 +52,12 @@ add_library(swscale SHARED IMPORTED)
 set_target_properties(swscale PROPERTIES
         IMPORTED_LOCATION "${YUV_LIB_DIR}/lib/libswscale.so"
 )
-include_directories("${LOCAL_PATH}/include")
-include_directories("${YUV_LIB_DIR}/include")
-add_library(${PROJECT_NAME} SHARED ${MEDIE_SOURCES})
 
+add_library(${PROJECT_NAME} SHARED ${MEDIE_SOURCES})
+target_include_directories(${PROJECT_NAME} PRIVATE
+        ${LOCAL_PATH}/ffmpeg/include
+        ${LOCAL_PATH}/include
+)
 # 链接依赖库
 target_link_libraries(${PROJECT_NAME} PRIVATE
         avformat
