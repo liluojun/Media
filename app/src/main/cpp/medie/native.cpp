@@ -26,6 +26,7 @@ static const JNINativeMethod nativeMethod[] = {
         {"playbackSpeed",     "(Ljava/lang/String;D)I",                                   (void *) (playbackSpeed)},
 };
 MediaController *mediaController = NULL;
+
 // 类库加载时自动调用
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     JNIEnv *env = nullptr;

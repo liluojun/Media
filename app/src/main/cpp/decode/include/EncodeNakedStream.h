@@ -26,6 +26,16 @@
 #include <cstring>
 #include <arpa/inet.h>
 
+#ifdef __ANDROID__
+
+#include <android/native_window.h>
+#include <media/NdkImageReader.h>
+#include "jni.h"
+struct OffscreenSurface {
+    AImageReader *image_reader = nullptr;
+    ANativeWindow *surface = nullptr;
+};
+#endif
 using namespace std;
 extern "C" {
 #include "FrameCallback.h"
@@ -34,6 +44,8 @@ extern "C" {
 #include "../ffmpeg/include/libavcodec/avcodec.h"
 #include "../ffmpeg/include/libswresample/swresample.h"
 #include "../ffmpeg/include/libavutil/error.h"
+#include "../ffmpeg/include/libavutil/opt.h"
+ #include "../ffmpeg/include/libavutil/pixdesc.h"
 #include "AVSyncClock.h"
 #include "sonic.h"
 #include <vector>
@@ -78,7 +90,7 @@ typedef struct InitContext {
     pthread_cond_t readAudioCond;
     int64_t videoClock = 0;
     int64_t audioClock = 0;
-    bool isSoftOrHardDecod= true;
+    bool isSoftOrHardDecod = true;
     std::shared_ptr<AVSyncClock> syncClock;
 
     void audioInitFailClean() {
@@ -124,6 +136,7 @@ private:
     InitContext *decodeCtx = nullptr;
     FrameCallback *frameCallback = nullptr;
     std::thread workerThread;
+
 public:
     EncodeNakedStream();
 
@@ -138,6 +151,7 @@ public:
     bool playbackSpeed(double speed);
 
     void closeStream();
+
 };
 
 #ifdef __cplusplus

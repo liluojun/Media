@@ -70,4 +70,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
         log
         oboe
         common
+        mediandk
 )

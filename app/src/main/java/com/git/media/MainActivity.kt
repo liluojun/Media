@@ -107,8 +107,10 @@ class MainActivity : AppCompatActivity() {
     lateinit var codec: MediaCodec
     fun test() {
         try {
-            codec = MediaCodec.createDecoderByType("video/hevc")
-            val format = MediaFormat.createVideoFormat("video/hevc", 2880, 1620)
+//            codec = MediaCodec.createDecoderByType("video/hevc")
+//            val format = MediaFormat.createVideoFormat("video/hevc", 2880, 1620)
+            codec = MediaCodec.createDecoderByType("video/raw")
+            val format = MediaFormat.createVideoFormat("video/raw", 2304, 1296)
             format.setByteBuffer("csd-0", ByteBuffer.wrap(vps)) // 通常是 VPS
             format.setByteBuffer("csd-1", ByteBuffer.wrap(pps))
             format.setByteBuffer("csd-2", ByteBuffer.wrap(sps)) // H.265 可以有多个 csd
