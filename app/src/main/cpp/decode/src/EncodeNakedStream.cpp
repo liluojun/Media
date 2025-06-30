@@ -209,7 +209,7 @@ void buildAvccExtradata(const std::vector<uint8_t> &sps,
 }
 
 int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData *data,
-                     AVCodecID *lastAVCodecID,jobject surface) {
+                     AVCodecID *lastAVCodecID) {
     if (videoCodec != nullptr || (*lastAVCodecID == AV_CODEC_ID_NONE) ||
         (*lastAVCodecID != AV_CODEC_ID_NONE && *lastAVCodecID != data->codecId) ||
         (ctx->videoDecodeCtx->videoCodecCtx == nullptr) ||
@@ -334,19 +334,25 @@ int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData
                         break;
                     }
                 }
+                // 创建硬件设备上下文
                 AVBufferRef *hw_device_ctx = nullptr;
-                enum AVHWDeviceType type = AV_HWDEVICE_TYPE_NONE;
-                while ((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE) {
-                    LOGE("Supported HW device: %s", av_hwdevice_get_type_name(type));
+                if (av_hwdevice_ctx_create(&hw_device_ctx, AV_HWDEVICE_TYPE_MEDIACODEC, nullptr, nullptr, 0) < 0) {
+                    LOGE("创建 HW 设备上下文失败");
+                    return -6;
                 }
-                int result = av_hwdevice_ctx_create(&hw_device_ctx, AV_HWDEVICE_TYPE_MEDIACODEC,
-                                                    nullptr, nullptr, 0);
-                if (result < 0) {
-                    LOGE("Failed to create HW device context");
-                    return -11;
+
+                // 创建并初始化 hw_frames_ctx
+                AVBufferRef *hw_frames_ctx = av_hwframe_ctx_alloc(hw_device_ctx);
+                if (!hw_frames_ctx) {
+                    LOGE("分配 hw_frames_ctx 失败");
+                    av_buffer_unref(&hw_device_ctx);
+                    return -7;
                 }
+
                 ctx->videoDecodeCtx->videoCodecCtx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
-                av_buffer_unref(&hw_device_ctx); // ✅ 增加这一行释放临时引用
+
+                av_buffer_unref(&hw_device_ctx);
+
                 // 设置格式回调，用于确定硬件解码格式
                 ctx->videoDecodeCtx->videoCodecCtx->get_format = [](AVCodecContext *s,
                                                                     const enum AVPixelFormat *pix_fmts) {
@@ -358,7 +364,8 @@ int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData
                     return AV_PIX_FMT_NONE;
                 };
                 AVMediaCodecContext *mediaCodecContext = av_mediacodec_alloc_context();
-                int ret2=av_mediacodec_default_init(ctx->videoDecodeCtx->videoCodecCtx, mediaCodecContext, surface);
+                int ret2 = av_mediacodec_default_init(ctx->videoDecodeCtx->videoCodecCtx,
+                                                      mediaCodecContext, ctx->surfaceHolder->getGlobalRef());
                 av_strerror(ret2, errbuf,
                             sizeof(errbuf));
                 LOGE("av_mediacodec_default_init , ret=%d, reason=%s", ret2, errbuf);
@@ -381,31 +388,19 @@ int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData
                     return -4;
                 }
                 LOGE("After open codec, pix_fmt=%d", ctx->videoDecodeCtx->videoCodecCtx->pix_fmt);
-                if (ctx->videoDecodeCtx->videoCodecCtx->hw_device_ctx) {
-                    AVHWDeviceContext *hw_ctx = (AVHWDeviceContext *) ctx->videoDecodeCtx->videoCodecCtx->hw_device_ctx->data;
-                    LOGE("Active HW device: %s", av_hwdevice_get_type_name(hw_ctx->type));
+                AVHWFramesContext *frames_ctx = (AVHWFramesContext *)hw_frames_ctx->data;
+                frames_ctx->format = hw_pix_fmt;
+                frames_ctx->sw_format = AV_PIX_FMT_NV12;
+                frames_ctx->width = data->width;
+                frames_ctx->height = data->height;
 
-                    if (ctx->videoDecodeCtx->videoCodecCtx->hw_frames_ctx) {
-                        AVHWFramesContext *frame_ctx = (AVHWFramesContext *) ctx->videoDecodeCtx->videoCodecCtx->hw_frames_ctx->data;
-                        LOGE("HW frame format: %s", av_get_pix_fmt_name(frame_ctx->format));
-                    }
-                } else {
-                    LOGE("HW device context NOT set!");
+                if (av_hwframe_ctx_init(hw_frames_ctx) < 0) {
+                    LOGE("初始化 hw_frames_ctx 失败");
+                    av_buffer_unref(&hw_frames_ctx);
+                    return -8;
                 }
-
-// 获取详细错误信息
-                const char *err_desc = av_err2str(ret);
-                LOGE("avcodec_open2 error: %s", err_desc);
-
-// 检查 MediaCodec 私有错误
-                if (ctx->videoDecodeCtx->videoCodecCtx->priv_data) {
-                    char *mediacodec_err = NULL;
-                    av_opt_get(ctx->videoDecodeCtx->videoCodecCtx->priv_data, "error_detail", 0,
-                               (uint8_t **) &mediacodec_err);
-                    if (mediacodec_err) {
-                        LOGE("MediaCodec internal error: %s", mediacodec_err);
-                    }
-                }
+                ctx->videoDecodeCtx->videoCodecCtx->hw_frames_ctx = av_buffer_ref(hw_frames_ctx);
+                av_buffer_unref(&hw_frames_ctx);
             }
 #else
             videoCodec = avcodec_find_decoder(data->codecId);
@@ -462,10 +457,6 @@ void videoThread(InitContext *ctx) {
         std::vector<uint8_t> avccFrame = convertAnnexBToAVCC(packet->data, packet->size);
         av_new_packet(pkt, avccFrame.size());
         memcpy(pkt->data, avccFrame.data(), avccFrame.size());
-        LOGE("NALU converted size=%zu, first 16 bytes:", avccFrame.size());
-        for (int i = 0; i < 16 && i < avccFrame.size(); i++) {
-            LOGE("%02X ", avccFrame[i]);
-        }
         ret = avcodec_send_packet(ctx->videoDecodeCtx->videoCodecCtx, pkt);
         av_packet_free(&pkt);
         delete packet;
@@ -487,14 +478,27 @@ void videoThread(InitContext *ctx) {
                     av_frame_unref(frame);
                     continue;
                 }
-
+                AVHWFramesContext *frames_ctx = (AVHWFramesContext *)(ctx->videoDecodeCtx->videoCodecCtx->hw_frames_ctx->data);
+                if (frames_ctx) {
+                    sw_frame->format = frames_ctx->sw_format;
+                } else {
+                    // fallback 设置
+                    sw_frame->format = AV_PIX_FMT_YUV420P;
+                }
+                sw_frame->width = frame->width;
+                sw_frame->height = frame->height;
+                if (av_frame_get_buffer(sw_frame, 0) < 0) {
+                    LOGE("Failed to allocate buffer for sw_frame");
+                    av_frame_free(&sw_frame);
+                    av_frame_unref(frame);
+                    continue;
+                }
                 int err = av_hwframe_transfer_data(sw_frame, frame, 0);
                 if (err < 0) {
                     LOGE("av_hwframe_transfer_data failed: %s", av_err2str(err));
                     av_frame_free(&sw_frame);
                     av_frame_unref(frame);
-                    return;
-                    //continue;
+                    continue;
                 }
 
                 finalFrame = sw_frame;  // 用 sw_frame 代替原 frame（即数据在系统内存）
@@ -804,7 +808,7 @@ void custom_log_callback(void *ptr, int level, const char *fmt, va_list vl) {
     }
 }
 
-void test(InitContext *ctx, const AVCodec *videoCodec,jobject surface) {
+void test(InitContext *ctx, const AVCodec *videoCodec, jobject surface) {
 #ifdef __ANDROID__
     char codecName[64] = {0};
     getAndroidCodec(AV_CODEC_ID_H264, codecName);
@@ -896,7 +900,8 @@ void test(InitContext *ctx, const AVCodec *videoCodec,jobject surface) {
     LOGE("open codec, pix_fmt=%d   w=%d, h=%d", ctx->videoDecodeCtx->videoCodecCtx->pix_fmt,
          ctx->videoDecodeCtx->videoCodecCtx->width, ctx->videoDecodeCtx->videoCodecCtx->height);
     AVMediaCodecContext *mediaCodecContext = av_mediacodec_alloc_context();
-    int ret2=av_mediacodec_default_init(ctx->videoDecodeCtx->videoCodecCtx, mediaCodecContext, surface);
+    int ret2 = av_mediacodec_default_init(ctx->videoDecodeCtx->videoCodecCtx, mediaCodecContext,
+                                          surface);
     av_strerror(ret2, errbuf,
                 sizeof(errbuf));
     LOGE("av_mediacodec_default_init , ret=%d, reason=%s", ret2, errbuf);
@@ -944,7 +949,24 @@ void test(InitContext *ctx, const AVCodec *videoCodec,jobject surface) {
 #endif
 }
 
-bool EncodeNakedStream::openStream(const char *filePath,jobject surface) {
+void saveSurface(InitContext *decodeCtx, jobject surface) {
+    JavaVM *javaVm = (JavaVM *)av_jni_get_java_vm(NULL); // 注意这里返回值赋值
+    if (!javaVm) {
+        // 获取失败，处理错误
+        return;
+    }
+    JNIEnv *env = nullptr;
+    if (javaVm->GetEnv((void **)&env, JNI_VERSION_1_6) != JNI_OK) {
+        // 当前线程未附加 JVM，尝试附加线程
+        if (javaVm->AttachCurrentThread(&env, NULL) != JNI_OK) {
+            // 附加失败，处理错误
+            return;
+        }
+    }
+    // 使用 env 和 surface 创建 SurfaceHolder
+    decodeCtx->surfaceHolder = new SurfaceHolder(javaVm, env, surface);
+}
+bool EncodeNakedStream::openStream(const char *filePath, jobject surface) {
     try {
         av_log_set_callback(custom_log_callback);
         av_log_set_level(AV_LOG_DEBUG);
@@ -958,13 +980,15 @@ bool EncodeNakedStream::openStream(const char *filePath,jobject surface) {
         decodeCtx->audioDecodeCtx = new AudioDecodeContext();
         decodeCtx->audioDecodeCtx->init();
         decodeCtx->videoDecodeCtx->frameCallback = frameCallback;
-//        decodeCtx->videoDecodeCtx->videoDecodeThread = std::thread(videoThread, decodeCtx);
-//        decodeCtx->videoDecodeCtx->videoRendderThread = std::thread(videoRenderThread, decodeCtx);
-//        decodeCtx->audioDecodeCtx->audioDecodeThread = std::thread(audioThread, decodeCtx);
-//        decodeCtx->audioDecodeCtx->audioRendderThread = std::thread(audioRenderThread, decodeCtx);
-//        workerThread = std::thread(readThread, decodeCtx);
-         const AVCodec *videoCodec = nullptr;
-        test(decodeCtx,videoCodec,surface);
+        saveSurface(decodeCtx, surface);
+
+        decodeCtx->videoDecodeCtx->videoDecodeThread = std::thread(videoThread, decodeCtx);
+        decodeCtx->videoDecodeCtx->videoRendderThread = std::thread(videoRenderThread, decodeCtx);
+        decodeCtx->audioDecodeCtx->audioDecodeThread = std::thread(audioThread, decodeCtx);
+        decodeCtx->audioDecodeCtx->audioRendderThread = std::thread(audioRenderThread, decodeCtx);
+        workerThread = std::thread(readThread, decodeCtx);
+//        const AVCodec *videoCodec = nullptr;
+//        test(decodeCtx, videoCodec, surface);
     } catch (const std::system_error &e) {
         delete decodeCtx;
         decodeCtx = nullptr;
@@ -979,6 +1003,10 @@ void EncodeNakedStream::closeStream() {
         decodeCtx->abortRequest = true; // 添加终止标志
         if (workerThread.joinable()) {
             workerThread.join(); // 替换 pthread_join
+        }
+        if(decodeCtx->surfaceHolder){
+            delete decodeCtx->surfaceHolder;
+            decodeCtx->surfaceHolder = nullptr;
         }
         delete decodeCtx;
         decodeCtx = nullptr;

@@ -24,6 +24,7 @@ set(MEDIE_SOURCES
         src/AudioPlayer.cpp
         src/AVSyncClock.cpp
         src/sonic.c
+        src/SurfaceHolder.cpp
 )
 
 # 添加预编译的 so

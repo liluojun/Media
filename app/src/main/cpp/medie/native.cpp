@@ -35,6 +35,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
         return 0; // 修正错误返回值类型
     }
     av_jni_set_java_vm(vm, nullptr);
+
     jclass jniClass = env->FindClass(lpClassPathName);
     if (!jniClass) {
         env->ExceptionClear(); // 清除PendingException
