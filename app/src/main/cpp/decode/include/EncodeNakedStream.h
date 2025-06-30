@@ -31,6 +31,7 @@
 #include <android/native_window.h>
 #include <media/NdkImageReader.h>
 #include "jni.h"
+
 struct OffscreenSurface {
     AImageReader *image_reader = nullptr;
     ANativeWindow *surface = nullptr;
@@ -42,10 +43,11 @@ extern "C" {
 #include "../../common/include/native_log.h"
 #include "../ffmpeg/include/libavformat/avformat.h"
 #include "../ffmpeg/include/libavcodec/avcodec.h"
+#include "../ffmpeg/include/libavcodec/mediacodec.h"
 #include "../ffmpeg/include/libswresample/swresample.h"
 #include "../ffmpeg/include/libavutil/error.h"
 #include "../ffmpeg/include/libavutil/opt.h"
- #include "../ffmpeg/include/libavutil/pixdesc.h"
+#include "../ffmpeg/include/libavutil/pixdesc.h"
 #include "AVSyncClock.h"
 #include "sonic.h"
 #include <vector>
@@ -92,6 +94,7 @@ typedef struct InitContext {
     int64_t audioClock = 0;
     bool isSoftOrHardDecod = true;
     std::shared_ptr<AVSyncClock> syncClock;
+    jobject surface = nullptr;
 
     void audioInitFailClean() {
         pthread_mutex_lock(&readAudioMutex);
@@ -142,7 +145,7 @@ public:
 
     ~EncodeNakedStream();
 
-    bool openStream(const char *path);
+    bool openStream(const char *path, jobject surface);
 
     void addFrame(uint8_t *frame, int type);
 

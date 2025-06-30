@@ -10,11 +10,12 @@
 
 #ifdef __cplusplus
 extern "C" {
+#include "libavcodec/jni.h"
 #endif
 static const char *lpClassPathName = "com/git/media/NativeMedia";
 static const JNINativeMethod nativeMethod[] = {
         // Java中的函数名                            函数签名信息                                         native的函数指针
-        {"openStream",        "(Ljava/lang/String;)I",                                    (void *) (openStream)},
+        {"openStream",        "(Ljava/lang/String;Ljava/lang/Object;)I",                                    (void *) (openStream)},
         {"closeStream",       "(Ljava/lang/String;)I",                                    (void *) (closeStream)},
         {"screenshot",        "(Ljava/lang/String;Ljava/lang/String;)I",                  (void *) (screenshot)},
         {"creatSurface",      "(Ljava/lang/String;Ljava/lang/Object;II)I",                (void *) (creatSurface)},
@@ -33,7 +34,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     if (vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) != JNI_OK) {
         return 0; // 修正错误返回值类型
     }
-
+    av_jni_set_java_vm(vm, nullptr);
     jclass jniClass = env->FindClass(lpClassPathName);
     if (!jniClass) {
         env->ExceptionClear(); // 清除PendingException
@@ -56,11 +57,12 @@ JNIEXPORT jint JNICALL init(JNIEnv *env, jobject thiz) {
     return 0;
 }
 
-JNIEXPORT jint JNICALL openStream(JNIEnv *env, jobject thiz, jstring path) {
+JNIEXPORT jint JNICALL openStream(JNIEnv *env, jobject thiz, jstring path,jobject surface) {
     jint result = 0;
     if (NULL != mediaController) {
+        LOGE("JNIEnv from Java call: %p", env);
         std::string pStr = JStringToStdString(env, path);
-        result = mediaController->openStream(&pStr);
+        result = mediaController->openStream(&pStr,surface);
     } else {
         LOGE("mediaController is null");
         result = -1;

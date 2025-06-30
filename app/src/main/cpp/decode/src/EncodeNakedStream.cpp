@@ -5,8 +5,16 @@
 #include "../include/EncodeNakedStream.h"
 
 
-
 static enum AVPixelFormat hw_pix_fmt = AV_PIX_FMT_NONE;
+const uint8_t dataSpsPPs[] = {
+        0x00, 0x00, 0x00, 0x01, 0x27, 0x64, 0x00, 0x33,
+        0xAD, 0x00, 0xCE, 0x80, 0x24, 0x00, 0xA3, 0xA6,
+        0xA0, 0x20, 0x20, 0x3E, 0x00, 0x00, 0x03, 0x00,
+        0x02, 0x00, 0x00, 0x03, 0x00, 0x64, 0x62, 0x20,
+        0x00, 0x44, 0x7B, 0x00, 0x00, 0x66, 0xB8, 0xEF,
+        0xFF, 0xE0, 0x50, 0x00, 0x00, 0x00, 0x01, 0x28,
+        0xEE, 0x3C, 0xB0
+};
 
 int get_nal_type(const uint8_t *data, int codecId) {
     if (codecId == AV_CODEC_ID_H264) {
@@ -16,8 +24,9 @@ int get_nal_type(const uint8_t *data, int codecId) {
     }
     return -1;
 }
+
 // 将一帧 H264 AnnexB 格式转为 AVCC 格式（用于 MediaCodec 解码）
-std::vector<uint8_t> convertAnnexBToAVCC(const uint8_t* data, size_t size) {
+std::vector<uint8_t> convertAnnexBToAVCC(const uint8_t *data, size_t size) {
     std::vector<uint8_t> avccData;
     size_t pos = 0;
     while (pos + 3 < size) {
@@ -133,8 +142,8 @@ bool parseHeader(const std::vector<uint8_t> &header, NakedFrameData *data) {
         data->width = *reinterpret_cast<const int16_t *>(&header[24]);
         data->height = *reinterpret_cast<const int16_t *>(&header[26]);
         data->data = new uint8_t[data->size];
-       /* LOGE("data->frametype=%d    data->size=%d    data->pts=%d  width=%d,  height=%d", data->frametype, data->size,
-             data->pts,data->width,data->height)*/
+        /* LOGE("data->frametype=%d    data->size=%d    data->pts=%d  width=%d,  height=%d", data->frametype, data->size,
+              data->pts,data->width,data->height)*/
         int codeId = *reinterpret_cast<const int8_t *>(&header[28]);
         switch (codeId) {
             case 0:
@@ -169,18 +178,20 @@ void getAndroidCodec(AVCodecID codecId, char *codecName) {
             break;
     }
 }
- void buildAvccExtradata(const std::vector<uint8_t>& sps,
-                                        const std::vector<uint8_t>& pps,std::vector<uint8_t>& extradata) {
+
+void buildAvccExtradata(const std::vector<uint8_t> &sps,
+                        const std::vector<uint8_t> &pps, std::vector<uint8_t> &extradata) {
 
 
-    if (sps.size() < 4) return ;
+    if (sps.size() < 4) return;
 
     // AVCC header
     extradata.push_back(0x01);               // configurationVersion
     extradata.push_back(sps[1]);             // profile_idc
     extradata.push_back(sps[2]);             // profile_compat
     extradata.push_back(sps[3]);             // level_idc
-    extradata.push_back(0xFF);               // 6 bits reserved + 2 bits lengthSizeMinusOne (4 bytes)
+    extradata.push_back(
+            0xFF);               // 6 bits reserved + 2 bits lengthSizeMinusOne (4 bytes)
 
     // SPS count
     extradata.push_back(0xE1);               // 3 bits reserved + 5 bits numOfSPS (1)
@@ -194,11 +205,11 @@ void getAndroidCodec(AVCodecID codecId, char *codecName) {
     extradata.push_back(pps.size() & 0xFF);        // PPS size low
     extradata.insert(extradata.end(), pps.begin(), pps.end());
 
-    return ;
+    return;
 }
 
 int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData *data,
-                     AVCodecID *lastAVCodecID) {
+                     AVCodecID *lastAVCodecID,jobject surface) {
     if (videoCodec != nullptr || (*lastAVCodecID == AV_CODEC_ID_NONE) ||
         (*lastAVCodecID != AV_CODEC_ID_NONE && *lastAVCodecID != data->codecId) ||
         (ctx->videoDecodeCtx->videoCodecCtx == nullptr) ||
@@ -233,6 +244,7 @@ int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData
 #ifdef __ANDROID__
             LOGE("NakedFrameData %d       %d", sizeof(data->data), data->size)
             char codecName[64] = {0};
+            char errbuf[AV_ERROR_MAX_STRING_SIZE] = {0};
             getAndroidCodec(data->codecId, codecName);
             if (strlen(codecName) > 0) {
                 LOGE("yingjie")
@@ -270,7 +282,8 @@ int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData
                     CodecExtraData extra = parseSpsPpsVpsFromIFrame(data->data, data->size,
                                                                     data->codecId);
                     std::vector<uint8_t> extradata;
-                    auto appendNalWithLengthPrefix = [](std::vector<uint8_t>& dest, const std::vector<uint8_t>& nal) {
+                    auto appendNalWithLengthPrefix = [](std::vector<uint8_t> &dest,
+                                                        const std::vector<uint8_t> &nal) {
                         uint32_t len = nal.size();
                         dest.push_back((len >> 24) & 0xFF);
                         dest.push_back((len >> 16) & 0xFF);
@@ -279,14 +292,14 @@ int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData
                         dest.insert(dest.end(), nal.begin(), nal.end());
                     };
                     if (data->codecId == AV_CODEC_ID_H264) {
-                        buildAvccExtradata(extra.sps,extra.pps,extradata);
+                        buildAvccExtradata(extra.sps, extra.pps, extradata);
                         LOGE("SPS size=%zu, first bytes: ", extra.sps.size());
-                        for (int i = 0; i < std::min((size_t)16, extra.sps.size()); ++i)
+                        for (int i = 0; i < std::min((size_t) 16, extra.sps.size()); ++i)
                             LOGE("%02X ", extra.sps[i]);
 
 
                         LOGE("PPS size=%zu, first bytes: ", extra.pps.size());
-                        for (int i = 0; i < std::min((size_t)16, extra.pps.size()); ++i)
+                        for (int i = 0; i < std::min((size_t) 16, extra.pps.size()); ++i)
                             LOGE("%02X ", extra.pps[i]);
 
 //                        if (!extra.sps.empty()) appendNalWithLengthPrefix(extradata, extra.sps);
@@ -301,7 +314,8 @@ int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData
                     memcpy(ctx->videoDecodeCtx->videoCodecCtx->extradata, extradata.data(),
                            extradata.size());
                     ctx->videoDecodeCtx->videoCodecCtx->extradata_size = extradata.size();
-                    LOGE("extradata size=%d, first 16 bytes:", ctx->videoDecodeCtx->videoCodecCtx->extradata_size);
+                    LOGE("extradata size=%d, first 16 bytes:",
+                         ctx->videoDecodeCtx->videoCodecCtx->extradata_size);
                     for (int i = 0; i < 16 && i < extradata.size(); i++) {
                         LOGE("%02X ", extradata[i]);
                     }
@@ -312,7 +326,7 @@ int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData
                     const AVCodecHWConfig *config = avcodec_get_hw_config(videoCodec, i);
                     if (!config)
                         break;
-                    const char* name = av_get_pix_fmt_name(config->pix_fmt);
+                    const char *name = av_get_pix_fmt_name(config->pix_fmt);
                     LOGE("pix_fmt=%d name=%s\n", config->pix_fmt, name);
                     if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
                         config->device_type == AV_HWDEVICE_TYPE_MEDIACODEC) {
@@ -343,14 +357,22 @@ int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData
                     }
                     return AV_PIX_FMT_NONE;
                 };
+                AVMediaCodecContext *mediaCodecContext = av_mediacodec_alloc_context();
+                int ret2=av_mediacodec_default_init(ctx->videoDecodeCtx->videoCodecCtx, mediaCodecContext, surface);
+                av_strerror(ret2, errbuf,
+                            sizeof(errbuf));
+                LOGE("av_mediacodec_default_init , ret=%d, reason=%s", ret2, errbuf);
                 ctx->videoDecodeCtx->videoCodecCtx->codec_type = AVMEDIA_TYPE_VIDEO;
                 ctx->videoDecodeCtx->videoCodecCtx->width = data->width;
                 ctx->videoDecodeCtx->videoCodecCtx->height = data->height;
-                ctx->videoDecodeCtx->videoCodecCtx->pix_fmt=hw_pix_fmt;
+                ctx->videoDecodeCtx->videoCodecCtx->pix_fmt = hw_pix_fmt;
                 ctx->videoDecodeCtx->videoCodecCtx->sw_pix_fmt = AV_PIX_FMT_NV12;
-                LOGE("open codec, pix_fmt=%d   w=%d, h=%d", ctx->videoDecodeCtx->videoCodecCtx->pix_fmt,ctx->videoDecodeCtx->videoCodecCtx->width,ctx->videoDecodeCtx->videoCodecCtx->height);
+                LOGE("open codec, pix_fmt=%d   w=%d, h=%d",
+                     ctx->videoDecodeCtx->videoCodecCtx->pix_fmt,
+                     ctx->videoDecodeCtx->videoCodecCtx->width,
+                     ctx->videoDecodeCtx->videoCodecCtx->height);
                 int ret = avcodec_open2(ctx->videoDecodeCtx->videoCodecCtx, videoCodec, NULL);
-                char errbuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+
                 av_strerror(ret, errbuf, sizeof(errbuf));
                 LOGE("avcodec_open2 , ret=%d, reason=%s", ret, errbuf);
                 if (ret < 0) {
@@ -360,11 +382,11 @@ int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData
                 }
                 LOGE("After open codec, pix_fmt=%d", ctx->videoDecodeCtx->videoCodecCtx->pix_fmt);
                 if (ctx->videoDecodeCtx->videoCodecCtx->hw_device_ctx) {
-                    AVHWDeviceContext *hw_ctx = (AVHWDeviceContext*)ctx->videoDecodeCtx->videoCodecCtx->hw_device_ctx->data;
+                    AVHWDeviceContext *hw_ctx = (AVHWDeviceContext *) ctx->videoDecodeCtx->videoCodecCtx->hw_device_ctx->data;
                     LOGE("Active HW device: %s", av_hwdevice_get_type_name(hw_ctx->type));
 
                     if (ctx->videoDecodeCtx->videoCodecCtx->hw_frames_ctx) {
-                        AVHWFramesContext *frame_ctx = (AVHWFramesContext*)ctx->videoDecodeCtx->videoCodecCtx->hw_frames_ctx->data;
+                        AVHWFramesContext *frame_ctx = (AVHWFramesContext *) ctx->videoDecodeCtx->videoCodecCtx->hw_frames_ctx->data;
                         LOGE("HW frame format: %s", av_get_pix_fmt_name(frame_ctx->format));
                     }
                 } else {
@@ -378,7 +400,8 @@ int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData
 // 检查 MediaCodec 私有错误
                 if (ctx->videoDecodeCtx->videoCodecCtx->priv_data) {
                     char *mediacodec_err = NULL;
-                    av_opt_get(ctx->videoDecodeCtx->videoCodecCtx->priv_data, "error_detail", 0, (uint8_t**)&mediacodec_err);
+                    av_opt_get(ctx->videoDecodeCtx->videoCodecCtx->priv_data, "error_detail", 0,
+                               (uint8_t **) &mediacodec_err);
                     if (mediacodec_err) {
                         LOGE("MediaCodec internal error: %s", mediacodec_err);
                     }
@@ -781,7 +804,147 @@ void custom_log_callback(void *ptr, int level, const char *fmt, va_list vl) {
     }
 }
 
-bool EncodeNakedStream::openStream(const char *filePath) {
+void test(InitContext *ctx, const AVCodec *videoCodec,jobject surface) {
+#ifdef __ANDROID__
+    char codecName[64] = {0};
+    getAndroidCodec(AV_CODEC_ID_H264, codecName);
+    if (strlen(codecName) > 0) {
+        LOGE("yingjie")
+        videoCodec = avcodec_find_decoder_by_name(codecName);
+    }
+
+    ctx->videoDecodeCtx->videoCodecCtx = avcodec_alloc_context3(videoCodec);
+    CodecExtraData extra = parseSpsPpsVpsFromIFrame(dataSpsPPs, sizeof(dataSpsPPs),
+                                                    AV_CODEC_ID_H264);
+    std::vector<uint8_t> extradata;
+    auto appendNalWithLengthPrefix = [](std::vector<uint8_t> &dest,
+                                        const std::vector<uint8_t> &nal) {
+        uint32_t len = nal.size();
+        dest.push_back((len >> 24) & 0xFF);
+        dest.push_back((len >> 16) & 0xFF);
+        dest.push_back((len >> 8) & 0xFF);
+        dest.push_back(len & 0xFF);
+        dest.insert(dest.end(), nal.begin(), nal.end());
+    };
+    buildAvccExtradata(extra.sps, extra.pps, extradata);
+    LOGE("SPS size=%zu, first bytes: ", extra.sps.size());
+    for (int i = 0; i < std::min((size_t) 16, extra.sps.size()); ++i)
+        LOGE("%02X ", extra.sps[i]);
+
+
+    LOGE("PPS size=%zu, first bytes: ", extra.pps.size());
+    for (int i = 0; i < std::min((size_t) 16, extra.pps.size()); ++i)
+        LOGE("%02X ", extra.pps[i]);
+
+
+    ctx->videoDecodeCtx->videoCodecCtx->extradata = (uint8_t *) av_malloc(
+            extradata.size() + AV_INPUT_BUFFER_PADDING_SIZE);
+    memcpy(ctx->videoDecodeCtx->videoCodecCtx->extradata, extradata.data(),
+           extradata.size());
+    ctx->videoDecodeCtx->videoCodecCtx->extradata_size = extradata.size();
+    LOGE("extradata size=%d, first 16 bytes:",
+         ctx->videoDecodeCtx->videoCodecCtx->extradata_size);
+    for (int i = 0; i < 16 && i < extradata.size(); i++) {
+        LOGE("%02X ", extradata[i]);
+    }
+
+    for (int i = 0;; i++) {
+        const AVCodecHWConfig *config = avcodec_get_hw_config(videoCodec, i);
+        if (!config)
+            break;
+        const char *name = av_get_pix_fmt_name(config->pix_fmt);
+        LOGE("pix_fmt=%d name=%s\n", config->pix_fmt, name);
+        if (config->
+                methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX
+            &&
+            config->device_type == AV_HWDEVICE_TYPE_MEDIACODEC) {
+            hw_pix_fmt = config->pix_fmt; // ✅ 初始化正确的格式
+            break;
+        }
+    }
+    AVBufferRef *hw_device_ctx = nullptr;
+    enum AVHWDeviceType type = AV_HWDEVICE_TYPE_NONE;
+    while ((
+                   type = av_hwdevice_iterate_types(type)
+           ) != AV_HWDEVICE_TYPE_NONE) {
+        LOGE("Supported HW device: %s", av_hwdevice_get_type_name(type));
+    }
+    int result = av_hwdevice_ctx_create(&hw_device_ctx, AV_HWDEVICE_TYPE_MEDIACODEC,
+                                        NULL, NULL, 0);
+    if (result < 0) {
+        LOGE("Failed to create HW device context");
+    }
+    ctx->videoDecodeCtx->videoCodecCtx->
+            hw_device_ctx = av_buffer_ref(hw_device_ctx);
+    av_buffer_unref(&hw_device_ctx); // ✅ 增加这一行释放临时引用
+// 设置格式回调，用于确定硬件解码格式
+    ctx->videoDecodeCtx->videoCodecCtx->
+            get_format = [](AVCodecContext *s,
+                            const enum AVPixelFormat *pix_fmts) {
+        for (; *pix_fmts != AV_PIX_FMT_NONE; pix_fmts++) {
+            if (*pix_fmts == hw_pix_fmt) {
+                return *pix_fmts;
+            }
+        }
+        return AV_PIX_FMT_NONE;
+    };
+    ctx->videoDecodeCtx->videoCodecCtx->
+            width = 2304;
+    ctx->videoDecodeCtx->videoCodecCtx->
+            height = 1296;
+    char errbuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+    LOGE("open codec, pix_fmt=%d   w=%d, h=%d", ctx->videoDecodeCtx->videoCodecCtx->pix_fmt,
+         ctx->videoDecodeCtx->videoCodecCtx->width, ctx->videoDecodeCtx->videoCodecCtx->height);
+    AVMediaCodecContext *mediaCodecContext = av_mediacodec_alloc_context();
+    int ret2=av_mediacodec_default_init(ctx->videoDecodeCtx->videoCodecCtx, mediaCodecContext, surface);
+    av_strerror(ret2, errbuf,
+                sizeof(errbuf));
+    LOGE("av_mediacodec_default_init , ret=%d, reason=%s", ret2, errbuf);
+    ctx->videoDecodeCtx->videoCodecCtx->hwaccel_context;
+    int ret = avcodec_open2(ctx->videoDecodeCtx->videoCodecCtx, videoCodec, NULL);
+
+    av_strerror(ret, errbuf,
+                sizeof(errbuf));
+    LOGE("avcodec_open2 , ret=%d, reason=%s", ret, errbuf);
+    if (ret < 0) {
+        avcodec_free_context(&ctx
+                ->videoDecodeCtx->videoCodecCtx);
+        ctx->videoInitFailClean();
+
+        return;
+    }
+    LOGE("After open codec, pix_fmt=%d", ctx->videoDecodeCtx->videoCodecCtx->pix_fmt);
+    if (ctx->videoDecodeCtx->videoCodecCtx->hw_device_ctx) {
+        AVHWDeviceContext *hw_ctx = (AVHWDeviceContext *) ctx->videoDecodeCtx->videoCodecCtx->hw_device_ctx->data;
+        LOGE("Active HW device: %s", av_hwdevice_get_type_name(hw_ctx->type));
+
+        if (ctx->videoDecodeCtx->videoCodecCtx->hw_frames_ctx) {
+            AVHWFramesContext *frame_ctx = (AVHWFramesContext *) ctx->videoDecodeCtx->videoCodecCtx->hw_frames_ctx->data;
+            LOGE("HW frame format: %s", av_get_pix_fmt_name(frame_ctx->format));
+        }
+    } else {
+        LOGE("HW device context NOT set!");
+    }
+
+// 获取详细错误信息
+    const char *err_desc = av_err2str(ret);
+    LOGE("avcodec_open2 error: %s", err_desc);
+
+// 检查 MediaCodec 私有错误
+    if (ctx->videoDecodeCtx->videoCodecCtx->priv_data) {
+        char *mediacodec_err = NULL;
+        av_opt_get(ctx
+                           ->videoDecodeCtx->videoCodecCtx->priv_data, "error_detail", 0,
+                   (uint8_t **) &mediacodec_err);
+        if (mediacodec_err) {
+            LOGE("MediaCodec internal error: %s", mediacodec_err);
+        }
+    }
+
+#endif
+}
+
+bool EncodeNakedStream::openStream(const char *filePath,jobject surface) {
     try {
         av_log_set_callback(custom_log_callback);
         av_log_set_level(AV_LOG_DEBUG);
@@ -795,11 +958,13 @@ bool EncodeNakedStream::openStream(const char *filePath) {
         decodeCtx->audioDecodeCtx = new AudioDecodeContext();
         decodeCtx->audioDecodeCtx->init();
         decodeCtx->videoDecodeCtx->frameCallback = frameCallback;
-        decodeCtx->videoDecodeCtx->videoDecodeThread = std::thread(videoThread, decodeCtx);
-        decodeCtx->videoDecodeCtx->videoRendderThread = std::thread(videoRenderThread, decodeCtx);
-        decodeCtx->audioDecodeCtx->audioDecodeThread = std::thread(audioThread, decodeCtx);
-        decodeCtx->audioDecodeCtx->audioRendderThread = std::thread(audioRenderThread, decodeCtx);
-        workerThread = std::thread(readThread, decodeCtx);
+//        decodeCtx->videoDecodeCtx->videoDecodeThread = std::thread(videoThread, decodeCtx);
+//        decodeCtx->videoDecodeCtx->videoRendderThread = std::thread(videoRenderThread, decodeCtx);
+//        decodeCtx->audioDecodeCtx->audioDecodeThread = std::thread(audioThread, decodeCtx);
+//        decodeCtx->audioDecodeCtx->audioRendderThread = std::thread(audioRenderThread, decodeCtx);
+//        workerThread = std::thread(readThread, decodeCtx);
+         const AVCodec *videoCodec = nullptr;
+        test(decodeCtx,videoCodec,surface);
     } catch (const std::system_error &e) {
         delete decodeCtx;
         decodeCtx = nullptr;
@@ -807,6 +972,7 @@ bool EncodeNakedStream::openStream(const char *filePath) {
     }
     return true;
 }
+
 
 void EncodeNakedStream::closeStream() {
     if (decodeCtx) {

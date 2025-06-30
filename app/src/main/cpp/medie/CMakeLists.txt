@@ -29,7 +29,10 @@ add_subdirectory(${OBOE_DIR} ./oboe)
 add_subdirectory(${COMMON_DIR} ./common)
 add_subdirectory(${SHARED_DIR} ./shared)
 add_subdirectory(${DECODE_DIR} ./decode)
-
+add_library(avcodec SHARED IMPORTED)
+set_target_properties(avcodec PROPERTIES
+        IMPORTED_LOCATION "${DECODE_DIR}/ffmpeg/${ANDROID_ABI}/lib/libavcodec.so"
+)
 add_library(${PROJECT_NAME} SHARED ${MEDIE_SOURCES})
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${OBOE_DIR}/include
@@ -45,4 +48,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
         common
         shared
         decode
+        avcodec
 )

@@ -12,7 +12,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import java.io.File
-import java.io.IOException
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -23,7 +22,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         val TAG = "MainActivity"
         val path =
-            "/storage/emulated/0/Android/data/com.git.media/files/4.ts"// "/storage/emulated/0/Android/data/com.git.media/files/creat.m3u8"
+            "/storage/emulated/0/Android/data/com.git.media/files/5.ts"// "/storage/emulated/0/Android/data/com.git.media/files/creat.m3u8"
         var goodPath: String? = null;
         val json =
             "[{\"time\":10.0,\"url\":\"video_0.ts\"},{\"time\":2.08,\"url\":\"video_1.ts\"}]"
@@ -72,7 +71,13 @@ class MainActivity : AppCompatActivity() {
         Log.e(TAG, "result =$result")
         findViewById<TextView>(R.id.t).setOnClickListener {
             if (result == 0) {
-                NativeMedia.openStream(path)
+                val surfaceTexture = SurfaceTexture(0) // texture ID = 0 (dummy)
+
+                surfaceTexture.setDefaultBufferSize(1, 1) // 小尺寸避免资源浪费
+
+                val dummySurface = Surface(surfaceTexture)
+
+                NativeMedia.openStream(path,dummySurface)
                 NativeMedia.creatSurface(path, Surface(tv.surfaceTexture), width, height)
 
             }

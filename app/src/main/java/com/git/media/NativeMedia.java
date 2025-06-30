@@ -1,5 +1,7 @@
 package com.git.media;
 
+import android.view.Surface;
+
 public class NativeMedia {
 
     static {
@@ -12,7 +14,7 @@ public class NativeMedia {
         System.loadLibrary("swscale");
     }
 
-    public static native int openStream(String path);
+    public static native int openStream(String path, Object surface);
 
     public static native int closeStream(String path);
 
