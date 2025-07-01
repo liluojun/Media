@@ -150,7 +150,7 @@ bool parseHeader(const std::vector<uint8_t> &header, NakedFrameData *data) {
         LOGE("解析头失败");
         return false;
     }
-    
+
 }
 
 void getAndroidCodec(AVCodecID codecId, char *codecName) {
@@ -238,28 +238,27 @@ int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData
                 videoCodec = avcodec_find_decoder_by_name(codecName);
             }
             if (!videoCodec) {
-//                LOGE("ruanjie")
-//                videoCodec = avcodec_find_decoder(data->codecId);
-//                if (!videoCodec) {
-//                    LOGE("Video codec not found");
-//                    ctx->videoInitFailClean();
-//                    return -2;
-//                }
-//                if (!(ctx->videoDecodeCtx->videoCodecCtx = avcodec_alloc_context3(videoCodec))) {
-//                    LOGE("Failed to allocate video codec context");
-//                    ctx->videoInitFailClean();
-//                    return -3;
-//                }
-//                ctx->videoDecodeCtx->videoCodecCtx->width = data->width;
-//                ctx->videoDecodeCtx->videoCodecCtx->height = data->height;
-//                ctx->videoDecodeCtx->videoCodecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
-//                ctx->videoDecodeCtx->user_time_base = (AVRational) {1, 25};
-//                ctx->videoDecodeCtx->frame_count = 0;
-//                if (avcodec_open2(ctx->videoDecodeCtx->videoCodecCtx, videoCodec, NULL) < 0) {
-//                    avcodec_free_context(&ctx->videoDecodeCtx->videoCodecCtx);
-//                    ctx->videoInitFailClean();
-//                    return -4;
-//                }
+                videoCodec = avcodec_find_decoder(data->codecId);
+                if (!videoCodec) {
+                    LOGE("Video codec not found");
+                    ctx->videoInitFailClean();
+                    return -2;
+                }
+                if (!(ctx->videoDecodeCtx->videoCodecCtx = avcodec_alloc_context3(videoCodec))) {
+                    LOGE("Failed to allocate video codec context");
+                    ctx->videoInitFailClean();
+                    return -3;
+                }
+                ctx->videoDecodeCtx->videoCodecCtx->width = data->width;
+                ctx->videoDecodeCtx->videoCodecCtx->height = data->height;
+                ctx->videoDecodeCtx->videoCodecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
+                ctx->videoDecodeCtx->user_time_base = (AVRational) {1, 25};
+                ctx->videoDecodeCtx->frame_count = 0;
+                if (avcodec_open2(ctx->videoDecodeCtx->videoCodecCtx, videoCodec, NULL) < 0) {
+                    avcodec_free_context(&ctx->videoDecodeCtx->videoCodecCtx);
+                    ctx->videoInitFailClean();
+                    return -4;
+                }
             } else {
                 ctx->videoDecodeCtx->videoCodecCtx = avcodec_alloc_context3(videoCodec);
                 if (data->frametype != PktIFrames) {
@@ -371,6 +370,7 @@ int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData
 }
 
 void videoThread(InitContext *ctx) {
+    int count = 0;
     const AVCodec *videoCodec = nullptr;
     AVCodecID lastAVCodecID = AV_CODEC_ID_NONE;
     ctx->videoDecodeCtx->calculateFrameRateNaked();
@@ -379,35 +379,43 @@ void videoThread(InitContext *ctx) {
         while (ctx->videoReadDecode.empty() && !ctx->videoDecodeCtx->abortRequest) {
             pthread_cond_wait(&ctx->readVideoCond, &ctx->readVideoMutex);
         }
-        LOGE("11")
+        LOGE("1111")
         NakedFrameData *packet = ctx->videoReadDecode.front();
         ctx->videoReadDecode.pop();
         pthread_mutex_unlock(&ctx->readVideoMutex);
-        int ret = initVideoAVCodec(ctx, videoCodec, packet, &lastAVCodecID);
-        if (ret < 0) {
-            LOGE("initVideoAVCodec error=%d", ret)
-            delete packet;
-            continue;
+        if (packet->frameNo == -1) {
+            avcodec_send_packet(ctx->videoDecodeCtx->videoCodecCtx, NULL);
+        }else {
+            int ret = initVideoAVCodec(ctx, videoCodec, packet, &lastAVCodecID);
+            if (ret < 0) {
+                LOGE("initVideoAVCodec error=%d", ret)
+                delete packet;
+                continue;
+            }
+            LOGE("2222")
+            AVPacket *pkt = av_packet_alloc();
+            pkt->data = packet->data;
+            pkt->size = packet->size;
+            if (ctx->isSoftOrHardDecod) {
+                std::vector<uint8_t> avccFrame = convertAnnexBToAVCC(packet->data, packet->size);
+                av_new_packet(pkt, avccFrame.size());
+                memcpy(pkt->data, avccFrame.data(), avccFrame.size());
+            }
+            ret = avcodec_send_packet(ctx->videoDecodeCtx->videoCodecCtx, pkt);
+            av_packet_free(&pkt);
+            if (ret < 0 && ret != AVERROR(EAGAIN)) {
+                LOGE("Error sending packet: %s", av_err2str(ret));
+                continue;
+            }
         }
-        LOGE("22")
-        AVPacket *pkt = av_packet_alloc();
-        pkt->data = packet->data;
-        pkt->size = packet->size;
-        std::vector<uint8_t> avccFrame = convertAnnexBToAVCC(packet->data, packet->size);
-        av_new_packet(pkt, avccFrame.size());
-        memcpy(pkt->data, avccFrame.data(), avccFrame.size());
-        ret = avcodec_send_packet(ctx->videoDecodeCtx->videoCodecCtx, pkt);
-        av_packet_free(&pkt);
+
         delete packet;
-        if (ret < 0 && ret != AVERROR(EAGAIN)) {
-            LOGE("Error sending packet: %s", av_err2str(ret));
-            continue;
-        }
-        LOGE("33")
+
+        LOGE("3333")
         AVFrame *frame = av_frame_alloc();
         while (avcodec_receive_frame(ctx->videoDecodeCtx->videoCodecCtx, frame) == 0 &&
                !ctx->videoDecodeCtx->abortRequest) {
-            LOGE("44")
+            LOGE("4444")
             AVFrame *finalFrame = frame;
             // 如果是硬解帧，进行内存拷贝到系统内存（sw_frame）
             if (frame->format == hw_pix_fmt) {
@@ -436,21 +444,25 @@ void videoThread(InitContext *ctx) {
                     frame->width, frame->height, AV_PIX_FMT_NV12,   // 输入格式
                     frame->width, frame->height, AV_PIX_FMT_YUV420P, // 输出格式
                     SWS_BILINEAR, NULL, NULL, NULL);
+            AVFrame *frameCopy = nullptr;
+            if (frame->format == AV_PIX_FMT_NV12 || frame->format == AV_PIX_FMT_NV21)  {
+                AVFrame *yuv420p_frame = av_frame_alloc();
+                yuv420p_frame->format = AV_PIX_FMT_YUV420P;
+                yuv420p_frame->width = finalFrame->width;
+                yuv420p_frame->height = finalFrame->height;
+                av_frame_get_buffer(yuv420p_frame, 32);
+                // 转换
+                sws_scale(
+                        sws_ctx,
+                        frame->data, frame->linesize,
+                        0, frame->height,
+                        yuv420p_frame->data, yuv420p_frame->linesize);
 
-            AVFrame *yuv420p_frame = av_frame_alloc();
-            yuv420p_frame->format = AV_PIX_FMT_YUV420P;
-            yuv420p_frame->width = finalFrame->width;
-            yuv420p_frame->height = finalFrame->height;
-            av_frame_get_buffer(yuv420p_frame, 32);
-            // 转换
-            sws_scale(
-                    sws_ctx,
-                    frame->data, frame->linesize,
-                    0, frame->height,
-                    yuv420p_frame->data, yuv420p_frame->linesize);
-
-            sws_freeContext(sws_ctx);
-            AVFrame *frameCopy = av_frame_clone(yuv420p_frame);
+                sws_freeContext(sws_ctx);
+                frameCopy = av_frame_clone(yuv420p_frame);
+            } else {
+                frameCopy = av_frame_clone(finalFrame);
+            }
             pthread_mutex_lock(&ctx->videoDecodeCtx->viedoDecodeMutex);
             while (ctx->videoDecodeCtx->videoDecodeQueue.size() >=
                    ctx->videoDecodeCtx->MAX_VIDEO_FRAME &&
@@ -458,11 +470,14 @@ void videoThread(InitContext *ctx) {
                 pthread_cond_wait(&ctx->videoDecodeCtx->viedoDecodeFullCond,
                                   &ctx->videoDecodeCtx->viedoDecodeMutex);
             }
-             ctx->videoDecodeCtx->videoDecodeQueue.push(frameCopy);
+            ctx->videoDecodeCtx->videoDecodeQueue.push(frameCopy);
+            count++;
+            LOGE("count=%d", count);
             pthread_cond_signal(&ctx->videoDecodeCtx->viedoDecodeEmptyCond);
             pthread_mutex_unlock(&ctx->videoDecodeCtx->viedoDecodeMutex);
         }
     }
+
 }
 
 void videoRenderThread(InitContext *ctx) {
@@ -693,6 +708,12 @@ void readThread(InitContext *ctx) {
                 if (!file.read(reinterpret_cast<char *>(header.data()), 36)) {
                     if (file.gcount() < 36) {
                         LOGE("文件头不完整%s  %d", ctx->filePath, file.gcount());
+                        pthread_mutex_lock(&ctx->readVideoMutex);
+                        NakedFrameData *data = new NakedFrameData();
+                        data->frameNo=-1;
+                        ctx->videoReadDecode.push(data);
+                        pthread_cond_signal(&ctx->readVideoCond);
+                        pthread_mutex_unlock(&ctx->readVideoMutex);
                         ctx->abortRequest = true;
                         break;
                     }
@@ -746,7 +767,6 @@ void custom_log_callback(void *ptr, int level, const char *fmt, va_list vl) {
         __android_log_print(ANDROID_LOG_ERROR, "ffmpeg", "%s", buffer);
     }
 }
-
 
 
 void saveSurface(InitContext *decodeCtx, jobject surface) {
