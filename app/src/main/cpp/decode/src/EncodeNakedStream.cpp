@@ -4,9 +4,6 @@
 
 #include "../include/EncodeNakedStream.h"
 
-
-static enum AVPixelFormat hw_pix_fmt = AV_PIX_FMT_NONE;
-
 int get_nal_type(const uint8_t *data, int codecId) {
     if (codecId == AV_CODEC_ID_H264) {
         return data[0] & 0x1F;  // H264: lower 5 bits
@@ -196,17 +193,251 @@ void buildAvccExtradata(const std::vector<uint8_t> &sps,
     return;
 }
 
+// 辅助函数：设置编解码器extra data
+void setCodecExtraData(AVCodecContext *codecCtx, NakedFrameData *data) {
+    CodecExtraData extra = parseSpsPpsVpsFromIFrame(data->data, data->size, data->codecId);
+    std::vector<uint8_t> extradata;
+    auto appendNalWithLengthPrefix = [](std::vector<uint8_t> &dest,
+                                        const std::vector<uint8_t> &nal) {
+        uint32_t len = nal.size();
+        dest.push_back((len >> 24) & 0xFF);
+        dest.push_back((len >> 16) & 0xFF);
+        dest.push_back((len >> 8) & 0xFF);
+        dest.push_back(len & 0xFF);
+        dest.insert(dest.end(), nal.begin(), nal.end());
+    };
+
+    if (data->codecId == AV_CODEC_ID_H264) {
+        buildAvccExtradata(extra.sps, extra.pps, extradata);
+    } else if (data->codecId == AV_CODEC_ID_HEVC) {
+        if (!extra.vps.empty()) appendNalWithLengthPrefix(extradata, extra.vps);
+        if (!extra.sps.empty()) appendNalWithLengthPrefix(extradata, extra.sps);
+        if (!extra.pps.empty()) appendNalWithLengthPrefix(extradata, extra.pps);
+    }
+
+    codecCtx->extradata = (uint8_t *) av_malloc(extradata.size() + AV_INPUT_BUFFER_PADDING_SIZE);
+    memcpy(codecCtx->extradata, extradata.data(), extradata.size());
+    codecCtx->extradata_size = extradata.size();
+}
+
+// 辅助函数：获取硬件像素格式
+enum AVPixelFormat getHardwarePixelFormat(const AVCodec *videoCodec) {
+    for (int i = 0;; i++) {
+        const AVCodecHWConfig *config = avcodec_get_hw_config(videoCodec, i);
+        if (!config) break;
+
+        if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
+            config->device_type == AV_HWDEVICE_TYPE_MEDIACODEC) {
+            return config->pix_fmt;
+        }
+    }
+    return AV_PIX_FMT_NONE;
+}
+
+// 静态回调函数
+static enum AVPixelFormat
+get_hw_format_callback(AVCodecContext *ctx, const enum AVPixelFormat *pix_fmts) {
+    if (!ctx || !ctx->opaque) return AV_PIX_FMT_NONE;
+
+    enum AVPixelFormat hw_pix_fmt = *(enum AVPixelFormat *) ctx->opaque;
+
+    for (; *pix_fmts != AV_PIX_FMT_NONE; pix_fmts++) {
+        if (*pix_fmts == hw_pix_fmt) {
+            return *pix_fmts;
+        }
+    }
+    return AV_PIX_FMT_NONE;
+}
+
+// 初始化软解器函数
+int initSoftwareDecoder(InitContext *ctx, NakedFrameData *data) {
+    const AVCodec *videoCodec = avcodec_find_decoder(data->codecId);
+    if (!videoCodec) {
+        LOGE("Software video codec not found");
+        return -2;
+    }
+
+    ctx->videoDecodeCtx->videoCodecCtx = avcodec_alloc_context3(videoCodec);
+    if (!ctx->videoDecodeCtx->videoCodecCtx) {
+        LOGE("Failed to allocate software codec context");
+        return -3;
+    }
+
+    // 配置软解参数
+    ctx->videoDecodeCtx->videoCodecCtx->width = data->width;
+    ctx->videoDecodeCtx->videoCodecCtx->height = data->height;
+    ctx->videoDecodeCtx->videoCodecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
+    ctx->videoDecodeCtx->user_time_base = (AVRational) {1, 25};
+    ctx->videoDecodeCtx->frame_count = 0;
+
+    // 打开软解器
+    if (avcodec_open2(ctx->videoDecodeCtx->videoCodecCtx, videoCodec, NULL) < 0) {
+        LOGE("Failed to open software codec");
+        avcodec_free_context(&ctx->videoDecodeCtx->videoCodecCtx);
+        return -4;
+    }
+
+    LOGI("Software decoder initialized successfully");
+    return 0;
+}
+// 初始化硬解器函数
+#ifdef __ANDROID__
+
+bool initHardwareDecoder(InitContext *ctx, NakedFrameData *data, const AVCodec *videoCodec) {
+    char errbuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+    ctx->videoDecodeCtx->videoCodecCtx = avcodec_alloc_context3(videoCodec);
+    if (!ctx->videoDecodeCtx->videoCodecCtx) {
+        LOGE("Failed to allocate video codec context");
+        return false;
+    }
+
+    // 配置编解码器参数
+    ctx->videoDecodeCtx->videoCodecCtx->width = data->width;
+    ctx->videoDecodeCtx->videoCodecCtx->height = data->height;
+    ctx->videoDecodeCtx->user_time_base = (AVRational) {1, 25};
+    ctx->videoDecodeCtx->frame_count = 0;
+
+    // 设置extra data
+    if (data->frametype == PktIFrames) {
+        setCodecExtraData(ctx->videoDecodeCtx->videoCodecCtx, data);
+    } else {
+        LOGW("Non-I-frame cannot initialize hardware decoder");
+        return false;
+    }
+
+    // 获取硬件像素格式
+    ctx->videoDecodeCtx->hw_pix_fmt = getHardwarePixelFormat(videoCodec);
+    if (ctx->videoDecodeCtx->hw_pix_fmt == AV_PIX_FMT_NONE) {
+        LOGE("No suitable hardware pixel format found");
+        return false;
+    }
+
+    // 创建硬件设备上下文
+    AVBufferRef *hw_device_ctx = nullptr;
+    if (av_hwdevice_ctx_create(&hw_device_ctx, AV_HWDEVICE_TYPE_MEDIACODEC, nullptr, nullptr, 0) <
+        0) {
+        LOGE("Failed to create HW device context");
+        return false;
+    }
+    ctx->videoDecodeCtx->videoCodecCtx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
+    av_buffer_unref(&hw_device_ctx);
+    // 设置格式回调
+    // 设置 get_format 回调 + opaque 传参
+    enum AVPixelFormat *pix_fmt_ptr = (enum AVPixelFormat *) av_malloc(sizeof(enum AVPixelFormat));
+    *pix_fmt_ptr = ctx->videoDecodeCtx->hw_pix_fmt;
+    ctx->videoDecodeCtx->videoCodecCtx->opaque = pix_fmt_ptr;
+    ctx->videoDecodeCtx->videoCodecCtx->get_format = get_hw_format_callback;
+    // 配置硬件解码选项
+    AVDictionary *opts = NULL;
+    av_dict_set(&opts, "output_mode", "pixel_buffer", 0);
+    // 打开编解码器
+    int ret = avcodec_open2(ctx->videoDecodeCtx->videoCodecCtx, videoCodec, &opts);
+    av_dict_free(&opts);
+    if (ret < 0) {
+        av_strerror(ret, errbuf, sizeof(errbuf));
+        LOGE("avcodec_open2 failed: %s", errbuf)
+        // 清理资源
+        av_freep(&ctx->videoDecodeCtx->videoCodecCtx->opaque);
+        avcodec_free_context(&ctx->videoDecodeCtx->videoCodecCtx);
+        return false;
+    }
+
+    LOGI("Hardware decoder initialized successfully");
+    return true;
+}
+
+#endif
+
 int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData *data,
                      AVCodecID *lastAVCodecID) {
-    if (videoCodec != nullptr || (*lastAVCodecID == AV_CODEC_ID_NONE) ||
-        (*lastAVCodecID != AV_CODEC_ID_NONE && *lastAVCodecID != data->codecId) ||
-        (ctx->videoDecodeCtx->videoCodecCtx == nullptr) ||
-        (ctx->videoDecodeCtx->videoCodecCtx->width != data->width) ||
-        (ctx->videoDecodeCtx->videoCodecCtx->height != data->height)) {
-        if (ctx->videoDecodeCtx->videoCodecCtx != nullptr) {
-            avcodec_free_context(&ctx->videoDecodeCtx->videoCodecCtx);
+
+    // 检查是否需要重新初始化编解码器
+    bool needReinit = !ctx->videoDecodeCtx->videoCodecCtx ||
+                      *lastAVCodecID != data->codecId ||
+                      ctx->videoDecodeCtx->videoCodecCtx->width != data->width ||
+                      ctx->videoDecodeCtx->videoCodecCtx->height != data->height;
+
+    if (!needReinit) return 0;
+    // 释放现有编解码器上下文
+    if (ctx->videoDecodeCtx->videoCodecCtx) {
+        if (ctx->videoDecodeCtx->videoCodecCtx->opaque) {
+            av_freep(&ctx->videoDecodeCtx->videoCodecCtx->opaque);
         }
-        if (!ctx->isSoftOrHardDecod) {
+        avcodec_free_context(&ctx->videoDecodeCtx->videoCodecCtx);
+    }
+    // 硬解模式处理
+    if (ctx->isSoftOrHardDecod) {
+#ifdef __ANDROID__
+        bool hwSuccess = false;
+        char codecName[64] = {0};
+        getAndroidCodec(data->codecId, codecName);
+
+        // 尝试硬解
+        if (strlen(codecName) > 0) {
+            const AVCodec *videoCodec = avcodec_find_decoder_by_name(codecName);
+            if (videoCodec) {
+                hwSuccess = initHardwareDecoder(ctx, data, videoCodec);
+            }
+        }
+
+        // 硬解失败时回退软解
+        if (!hwSuccess) {
+            LOGW("Hardware decoding failed, falling back to software");
+            return initSoftwareDecoder(ctx, data);
+        }
+#else
+        // 非Android平台直接使用软解
+        return initSoftwareDecoder(ctx, data);
+#endif
+    } else {
+        // 纯软解模式
+        return initSoftwareDecoder(ctx, data);
+    }
+
+    *lastAVCodecID = data->codecId;
+    return 0;
+}
+
+/*if (videoCodec != nullptr || (*lastAVCodecID == AV_CODEC_ID_NONE) ||
+    (*lastAVCodecID != AV_CODEC_ID_NONE && *lastAVCodecID != data->codecId) ||
+    (ctx->videoDecodeCtx->videoCodecCtx == nullptr) ||
+    (ctx->videoDecodeCtx->videoCodecCtx->width != data->width) ||
+    (ctx->videoDecodeCtx->videoCodecCtx->height != data->height)) {
+    if (ctx->videoDecodeCtx->videoCodecCtx != nullptr) {
+        avcodec_free_context(&ctx->videoDecodeCtx->videoCodecCtx);
+    }
+    if (!ctx->isSoftOrHardDecod) {
+        videoCodec = avcodec_find_decoder(data->codecId);
+        if (!videoCodec) {
+            LOGE("Video codec not found");
+            ctx->videoInitFailClean();
+            return -2;
+        }
+        if (!(ctx->videoDecodeCtx->videoCodecCtx = avcodec_alloc_context3(videoCodec))) {
+            LOGE("Failed to allocate video codec context");
+            ctx->videoInitFailClean();
+            return -3;
+        }
+        ctx->videoDecodeCtx->videoCodecCtx->width = data->width;
+        ctx->videoDecodeCtx->videoCodecCtx->height = data->height;
+        ctx->videoDecodeCtx->videoCodecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
+        ctx->videoDecodeCtx->user_time_base = (AVRational) {1, 25};
+        ctx->videoDecodeCtx->frame_count = 0;
+        if (avcodec_open2(ctx->videoDecodeCtx->videoCodecCtx, videoCodec, NULL) < 0) {
+            avcodec_free_context(&ctx->videoDecodeCtx->videoCodecCtx);
+            ctx->videoInitFailClean();
+            return -4;
+        }
+    } else {
+#ifdef __ANDROID__
+        char codecName[64] = {0};
+        char errbuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+        getAndroidCodec(data->codecId, codecName);
+        if (strlen(codecName) > 0) {
+            LOGE("yingjie")
+            videoCodec = avcodec_find_decoder_by_name(codecName);
+        }
+        if (!videoCodec) {
             videoCodec = avcodec_find_decoder(data->codecId);
             if (!videoCodec) {
                 LOGE("Video codec not found");
@@ -229,145 +460,114 @@ int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData
                 return -4;
             }
         } else {
-#ifdef __ANDROID__
-            char codecName[64] = {0};
-            char errbuf[AV_ERROR_MAX_STRING_SIZE] = {0};
-            getAndroidCodec(data->codecId, codecName);
-            if (strlen(codecName) > 0) {
-                LOGE("yingjie")
-                videoCodec = avcodec_find_decoder_by_name(codecName);
-            }
-            if (!videoCodec) {
-                videoCodec = avcodec_find_decoder(data->codecId);
-                if (!videoCodec) {
-                    LOGE("Video codec not found");
-                    ctx->videoInitFailClean();
-                    return -2;
-                }
-                if (!(ctx->videoDecodeCtx->videoCodecCtx = avcodec_alloc_context3(videoCodec))) {
-                    LOGE("Failed to allocate video codec context");
-                    ctx->videoInitFailClean();
-                    return -3;
-                }
-                ctx->videoDecodeCtx->videoCodecCtx->width = data->width;
-                ctx->videoDecodeCtx->videoCodecCtx->height = data->height;
-                ctx->videoDecodeCtx->videoCodecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
-                ctx->videoDecodeCtx->user_time_base = (AVRational) {1, 25};
-                ctx->videoDecodeCtx->frame_count = 0;
-                if (avcodec_open2(ctx->videoDecodeCtx->videoCodecCtx, videoCodec, NULL) < 0) {
-                    avcodec_free_context(&ctx->videoDecodeCtx->videoCodecCtx);
-                    ctx->videoInitFailClean();
-                    return -4;
-                }
+            ctx->videoDecodeCtx->videoCodecCtx = avcodec_alloc_context3(videoCodec);
+            if (data->frametype != PktIFrames) {
+                LOGE("非I帧无法搜寻sps与pps")
+                return -5;
             } else {
-                ctx->videoDecodeCtx->videoCodecCtx = avcodec_alloc_context3(videoCodec);
-                if (data->frametype != PktIFrames) {
-                    LOGE("非I帧无法搜寻sps与pps")
-                    return -5;
-                } else {
-                    CodecExtraData extra = parseSpsPpsVpsFromIFrame(data->data, data->size,
-                                                                    data->codecId);
-                    std::vector<uint8_t> extradata;
-                    auto appendNalWithLengthPrefix = [](std::vector<uint8_t> &dest,
-                                                        const std::vector<uint8_t> &nal) {
-                        uint32_t len = nal.size();
-                        dest.push_back((len >> 24) & 0xFF);
-                        dest.push_back((len >> 16) & 0xFF);
-                        dest.push_back((len >> 8) & 0xFF);
-                        dest.push_back(len & 0xFF);
-                        dest.insert(dest.end(), nal.begin(), nal.end());
-                    };
-                    if (data->codecId == AV_CODEC_ID_H264) {
-                        buildAvccExtradata(extra.sps, extra.pps, extradata);
-                    } else if (data->codecId == AV_CODEC_ID_HEVC) {
-                        if (!extra.vps.empty()) appendNalWithLengthPrefix(extradata, extra.vps);
-                        if (!extra.sps.empty()) appendNalWithLengthPrefix(extradata, extra.sps);
-                        if (!extra.pps.empty()) appendNalWithLengthPrefix(extradata, extra.pps);
-                    }
-                    ctx->videoDecodeCtx->videoCodecCtx->extradata = (uint8_t *) av_malloc(
-                            extradata.size() + AV_INPUT_BUFFER_PADDING_SIZE);
-                    memcpy(ctx->videoDecodeCtx->videoCodecCtx->extradata, extradata.data(),
-                           extradata.size());
-                    ctx->videoDecodeCtx->videoCodecCtx->extradata_size = extradata.size();
-                }
-
-                for (int i = 0;; i++) {
-                    const AVCodecHWConfig *config = avcodec_get_hw_config(videoCodec, i);
-                    if (!config)
-                        break;
-                    const char *name = av_get_pix_fmt_name(config->pix_fmt);
-                    LOGE("pix_fmt=%d name=%s\n", config->pix_fmt, name);
-                    if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
-                        config->device_type == AV_HWDEVICE_TYPE_MEDIACODEC) {
-                        hw_pix_fmt = config->pix_fmt; // ✅ 初始化正确的格式
-                        break;
-                    }
-                }
-                // 创建硬件设备上下文
-                AVBufferRef *hw_device_ctx = nullptr;
-                if (av_hwdevice_ctx_create(&hw_device_ctx, AV_HWDEVICE_TYPE_MEDIACODEC, nullptr,
-                                           nullptr, 0) < 0) {
-                    LOGE("创建 HW 设备上下文失败");
-                    return -6;
-                }
-                ctx->videoDecodeCtx->videoCodecCtx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
-                av_buffer_unref(&hw_device_ctx);
-
-                // 设置格式回调，用于确定硬件解码格式
-                ctx->videoDecodeCtx->videoCodecCtx->get_format = [](AVCodecContext *s,
-                                                                    const enum AVPixelFormat *pix_fmts) {
-                    for (; *pix_fmts != AV_PIX_FMT_NONE; pix_fmts++) {
-                        if (*pix_fmts == hw_pix_fmt) {
-                            return *pix_fmts;
-                        }
-                    }
-                    return AV_PIX_FMT_NONE;
+                CodecExtraData extra = parseSpsPpsVpsFromIFrame(data->data, data->size,
+                                                                data->codecId);
+                std::vector<uint8_t> extradata;
+                auto appendNalWithLengthPrefix = [](std::vector<uint8_t> &dest,
+                                                    const std::vector<uint8_t> &nal) {
+                    uint32_t len = nal.size();
+                    dest.push_back((len >> 24) & 0xFF);
+                    dest.push_back((len >> 16) & 0xFF);
+                    dest.push_back((len >> 8) & 0xFF);
+                    dest.push_back(len & 0xFF);
+                    dest.insert(dest.end(), nal.begin(), nal.end());
                 };
-                ctx->videoDecodeCtx->videoCodecCtx->width = data->width;
-                ctx->videoDecodeCtx->videoCodecCtx->height = data->height;
-                ctx->videoDecodeCtx->user_time_base = (AVRational) {1, 25};
-                ctx->videoDecodeCtx->frame_count = 0;
-                AVDictionary *opts = NULL;
-                // 设置输出模式为 pixel_buffer（像素缓冲区）
-                av_dict_set(&opts, "output_mode", "pixel_buffer", 0);
-                int ret = avcodec_open2(ctx->videoDecodeCtx->videoCodecCtx, videoCodec, &opts);
-                av_strerror(ret, errbuf, sizeof(errbuf));
-                LOGE("avcodec_open2 , ret=%d, reason=%s", ret, errbuf);
-                if (ret < 0) {
-                    avcodec_free_context(&ctx->videoDecodeCtx->videoCodecCtx);
-                    ctx->videoInitFailClean();
-                    return -4;
+                if (data->codecId == AV_CODEC_ID_H264) {
+                    buildAvccExtradata(extra.sps, extra.pps, extradata);
+                } else if (data->codecId == AV_CODEC_ID_HEVC) {
+                    if (!extra.vps.empty()) appendNalWithLengthPrefix(extradata, extra.vps);
+                    if (!extra.sps.empty()) appendNalWithLengthPrefix(extradata, extra.sps);
+                    if (!extra.pps.empty()) appendNalWithLengthPrefix(extradata, extra.pps);
+                }
+                ctx->videoDecodeCtx->videoCodecCtx->extradata = (uint8_t *) av_malloc(
+                        extradata.size() + AV_INPUT_BUFFER_PADDING_SIZE);
+                memcpy(ctx->videoDecodeCtx->videoCodecCtx->extradata, extradata.data(),
+                       extradata.size());
+                ctx->videoDecodeCtx->videoCodecCtx->extradata_size = extradata.size();
+            }
+
+            for (int i = 0;; i++) {
+                const AVCodecHWConfig *config = avcodec_get_hw_config(videoCodec, i);
+                if (!config)
+                    break;
+                const char *name = av_get_pix_fmt_name(config->pix_fmt);
+                LOGE("pix_fmt=%d name=%s\n", config->pix_fmt, name);
+                if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
+                    config->device_type == AV_HWDEVICE_TYPE_MEDIACODEC) {
+                    hw_pix_fmt = config->pix_fmt; // ✅ 初始化正确的格式
+                    break;
                 }
             }
-#else
-            videoCodec = avcodec_find_decoder(data->codecId);
-            if (!videoCodec) {
-                LOGE("Video codec not found");
-                ctx->videoInitFailClean();
-                return -2;
+            // 创建硬件设备上下文
+            AVBufferRef *hw_device_ctx = nullptr;
+            if (av_hwdevice_ctx_create(&hw_device_ctx, AV_HWDEVICE_TYPE_MEDIACODEC, nullptr,
+                                       nullptr, 0) < 0) {
+                LOGE("创建 HW 设备上下文失败");
+                return -6;
             }
-            if (!(ctx->videoDecodeCtx->videoCodecCtx = avcodec_alloc_context3(videoCodec))) {
-                LOGE("Failed to allocate video codec context");
-                ctx->videoInitFailClean();
-                return -3;
-            }
+            ctx->videoDecodeCtx->videoCodecCtx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
+            av_buffer_unref(&hw_device_ctx);
+
+            // 设置格式回调，用于确定硬件解码格式
+            ctx->videoDecodeCtx->videoCodecCtx->get_format = [](AVCodecContext *s,
+                                                                const enum AVPixelFormat *pix_fmts) {
+                for (; *pix_fmts != AV_PIX_FMT_NONE; pix_fmts++) {
+                    if (*pix_fmts == hw_pix_fmt) {
+                        return *pix_fmts;
+                    }
+                }
+                return AV_PIX_FMT_NONE;
+            };
             ctx->videoDecodeCtx->videoCodecCtx->width = data->width;
             ctx->videoDecodeCtx->videoCodecCtx->height = data->height;
-            ctx->videoDecodeCtx->videoCodecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
             ctx->videoDecodeCtx->user_time_base = (AVRational) {1, 25};
             ctx->videoDecodeCtx->frame_count = 0;
-            if (avcodec_open2(ctx->videoDecodeCtx->videoCodecCtx, videoCodec, NULL) < 0) {
+            AVDictionary *opts = NULL;
+            // 设置输出模式为 pixel_buffer（像素缓冲区）
+            av_dict_set(&opts, "output_mode", "pixel_buffer", 0);
+            int ret = avcodec_open2(ctx->videoDecodeCtx->videoCodecCtx, videoCodec, &opts);
+            av_strerror(ret, errbuf, sizeof(errbuf));
+            LOGE("avcodec_open2 , ret=%d, reason=%s", ret, errbuf);
+            if (ret < 0) {
                 avcodec_free_context(&ctx->videoDecodeCtx->videoCodecCtx);
                 ctx->videoInitFailClean();
                 return -4;
             }
-#endif
         }
-        *lastAVCodecID = data->codecId;
-
+#else
+        videoCodec = avcodec_find_decoder(data->codecId);
+        if (!videoCodec) {
+            LOGE("Video codec not found");
+            ctx->videoInitFailClean();
+            return -2;
+        }
+        if (!(ctx->videoDecodeCtx->videoCodecCtx = avcodec_alloc_context3(videoCodec))) {
+            LOGE("Failed to allocate video codec context");
+            ctx->videoInitFailClean();
+            return -3;
+        }
+        ctx->videoDecodeCtx->videoCodecCtx->width = data->width;
+        ctx->videoDecodeCtx->videoCodecCtx->height = data->height;
+        ctx->videoDecodeCtx->videoCodecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
+        ctx->videoDecodeCtx->user_time_base = (AVRational) {1, 25};
+        ctx->videoDecodeCtx->frame_count = 0;
+        if (avcodec_open2(ctx->videoDecodeCtx->videoCodecCtx, videoCodec, NULL) < 0) {
+            avcodec_free_context(&ctx->videoDecodeCtx->videoCodecCtx);
+            ctx->videoInitFailClean();
+            return -4;
+        }
+#endif
     }
-    return 0;
+    *lastAVCodecID = data->codecId;
+
 }
+return 0;
+}*/
 
 void videoThread(InitContext *ctx) {
     int count = 0;
@@ -385,7 +585,7 @@ void videoThread(InitContext *ctx) {
         pthread_mutex_unlock(&ctx->readVideoMutex);
         if (packet->frameNo == -1) {
             avcodec_send_packet(ctx->videoDecodeCtx->videoCodecCtx, NULL);
-        }else {
+        } else {
             int ret = initVideoAVCodec(ctx, videoCodec, packet, &lastAVCodecID);
             if (ret < 0) {
                 LOGE("initVideoAVCodec error=%d", ret)
@@ -418,7 +618,7 @@ void videoThread(InitContext *ctx) {
             LOGE("4444")
             AVFrame *finalFrame = frame;
             // 如果是硬解帧，进行内存拷贝到系统内存（sw_frame）
-            if (frame->format == hw_pix_fmt) {
+            if (frame->format == ctx->videoDecodeCtx->hw_pix_fmt) {
                 LOGE("当前为硬件帧，使用av_hwframe_transfer_data转为系统内存")
                 AVFrame *sw_frame = av_frame_alloc();
                 if (!sw_frame) {
@@ -445,7 +645,7 @@ void videoThread(InitContext *ctx) {
                     frame->width, frame->height, AV_PIX_FMT_YUV420P, // 输出格式
                     SWS_BILINEAR, NULL, NULL, NULL);
             AVFrame *frameCopy = nullptr;
-            if (frame->format == AV_PIX_FMT_NV12 || frame->format == AV_PIX_FMT_NV21)  {
+            if (frame->format == AV_PIX_FMT_NV12 || frame->format == AV_PIX_FMT_NV21) {
                 AVFrame *yuv420p_frame = av_frame_alloc();
                 yuv420p_frame->format = AV_PIX_FMT_YUV420P;
                 yuv420p_frame->width = finalFrame->width;
@@ -710,7 +910,7 @@ void readThread(InitContext *ctx) {
                         LOGE("文件头不完整%s  %d", ctx->filePath, file.gcount());
                         pthread_mutex_lock(&ctx->readVideoMutex);
                         NakedFrameData *data = new NakedFrameData();
-                        data->frameNo=-1;
+                        data->frameNo = -1;
                         ctx->videoReadDecode.push(data);
                         pthread_cond_signal(&ctx->readVideoCond);
                         pthread_mutex_unlock(&ctx->readVideoMutex);
