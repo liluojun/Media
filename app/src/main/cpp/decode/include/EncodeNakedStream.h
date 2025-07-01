@@ -49,6 +49,7 @@ extern "C" {
 #include "../ffmpeg/include/libavutil/error.h"
 #include "../ffmpeg/include/libavutil/opt.h"
 #include "../ffmpeg/include/libavutil/pixdesc.h"
+#include "../ffmpeg/include/libswscale/swscale.h"
 #include "AVSyncClock.h"
 #include "sonic.h"
 #include <vector>
