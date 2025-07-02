@@ -16,7 +16,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # 根据当前 ABI 动态获取预编译库路径
 set(LOCAL_PATH ${CMAKE_CURRENT_SOURCE_DIR})  # 等效于 $(call my-dir)
 set(YUV_LIB_DIR "${LOCAL_PATH}/ffmpeg/${ANDROID_ABI}")
+set(YUV_LIB_DIR2 "${LOCAL_PATH}/yuv/${ANDROID_ABI}")
 set(MEDIE_SOURCES
+        src/DecodeCommonUtils.cpp
         src/FFmpegEncodeStream.cpp
         src/EncodeStream2.cpp
         src/EncodeNakedStream.cpp
@@ -25,6 +27,7 @@ set(MEDIE_SOURCES
         src/AVSyncClock.cpp
         src/sonic.c
         src/SurfaceHolder.cpp
+
 )
 
 # 添加预编译的 so
@@ -53,12 +56,18 @@ add_library(swscale SHARED IMPORTED)
 set_target_properties(swscale PROPERTIES
         IMPORTED_LOCATION "${YUV_LIB_DIR}/lib/libswscale.so"
 )
-
+add_library(yuv SHARED IMPORTED)
+set_target_properties(yuv PROPERTIES
+        IMPORTED_LOCATION "${YUV_LIB_DIR2}/libyuv.so"
+)
 add_library(${PROJECT_NAME} SHARED ${MEDIE_SOURCES})
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${LOCAL_PATH}/ffmpeg/include
         ${LOCAL_PATH}/include
+        ${LOCAL_PATH}/yuv/include
 )
+
+
 # 链接依赖库
 target_link_libraries(${PROJECT_NAME} PRIVATE
         avformat
@@ -67,6 +76,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
         avutil
         swresample
         swscale # 预编译库
+        yuv
         android
         log
         oboe

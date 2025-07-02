@@ -7,7 +7,7 @@
 #define _Included_media_jni_NativeMethod
 #ifdef __cplusplus
 extern "C" {
-#include "libyuv.h"
+#include "../decode/yuv/include/libyuv.h"
 #include <android/log.h>
 #include "media_jni_NativeMethod.h"
 #include<string.h>

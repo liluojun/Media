@@ -278,7 +278,7 @@ int initSoftwareDecoder(InitContext *ctx, NakedFrameData *data) {
     }
 
     LOGI("Software decoder initialized successfully");
-    ctx->isSoftOrHardDecod= false;
+    ctx->isSoftOrHardDecod = false;
     return 0;
 }
 // 初始化硬解器函数
@@ -582,7 +582,6 @@ void videoThread(InitContext *ctx) {
         while (ctx->videoReadDecode.empty() && !ctx->videoDecodeCtx->abortRequest) {
             pthread_cond_wait(&ctx->readVideoCond, &ctx->readVideoMutex);
         }
-        LOGE("1111")
         if (ctx->videoDecodeCtx->abortRequest || ctx->videoReadDecode.empty()) {
             pthread_mutex_unlock(&ctx->readVideoMutex);
             break;
@@ -619,17 +618,13 @@ void videoThread(InitContext *ctx) {
                 continue;
             }
         }
-
         delete packet;
-
-        LOGE("3333")
         AVFrame *frame = av_frame_alloc();
         while (avcodec_receive_frame(ctx->videoDecodeCtx->videoCodecCtx, frame) == 0 &&
                !ctx->videoDecodeCtx->abortRequest) {
-            LOGE("4444")
             AVFrame *finalFrame = frame;
             // 如果是硬解帧，进行内存拷贝到系统内存（sw_frame）
-            if (frame->format == ctx->videoDecodeCtx->hw_pix_fmt) {
+            if (finalFrame->format == ctx->videoDecodeCtx->hw_pix_fmt) {
                 LOGE("当前为硬件帧，使用av_hwframe_transfer_data转为系统内存")
                 AVFrame *sw_frame = av_frame_alloc();
                 if (!sw_frame) {
@@ -651,26 +646,9 @@ void videoThread(InitContext *ctx) {
                     av_frame_free(&frame);  // 真正释放原始 frame
                 }
             }
-            struct SwsContext *sws_ctx = sws_getContext(
-                    frame->width, frame->height, AV_PIX_FMT_NV12,   // 输入格式
-                    frame->width, frame->height, AV_PIX_FMT_YUV420P, // 输出格式
-                    SWS_BILINEAR, NULL, NULL, NULL);
             AVFrame *frameCopy = nullptr;
-            if (frame->format == AV_PIX_FMT_NV12 || frame->format == AV_PIX_FMT_NV21) {
-                AVFrame *yuv420p_frame = av_frame_alloc();
-                yuv420p_frame->format = AV_PIX_FMT_YUV420P;
-                yuv420p_frame->width = finalFrame->width;
-                yuv420p_frame->height = finalFrame->height;
-                av_frame_get_buffer(yuv420p_frame, 32);
-                // 转换
-                sws_scale(
-                        sws_ctx,
-                        frame->data, frame->linesize,
-                        0, frame->height,
-                        yuv420p_frame->data, yuv420p_frame->linesize);
-
-                sws_freeContext(sws_ctx);
-                frameCopy = av_frame_clone(yuv420p_frame);
+            if (finalFrame->format == AV_PIX_FMT_NV12 || finalFrame->format == AV_PIX_FMT_NV21) {
+                frameCopy = DecodeCommonUtils::ConvertToYUV420PWithLibyuv(finalFrame);
             } else {
                 frameCopy = av_frame_clone(finalFrame);
             }

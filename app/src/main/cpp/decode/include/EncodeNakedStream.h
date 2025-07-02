@@ -40,6 +40,7 @@ using namespace std;
 extern "C" {
 #include "FrameCallback.h"
 #include "SurfaceHolder.h"
+#include "DecodeCommonUtils.h"
 #include "../../common/include/native_log.h"
 #include "../ffmpeg/include/libavformat/avformat.h"
 #include "../ffmpeg/include/libavcodec/avcodec.h"
