@@ -3,7 +3,7 @@
 //
 #include "MediaController.h"
 
-int MediaController::openStream(std::string *path,jobject surface) {
+int MediaController::openStream(std::string *path) {
     int result = 0;
     auto it = pathPlayerMap.find(*path);
     if (it == pathPlayerMap.end()) {
@@ -13,7 +13,7 @@ int MediaController::openStream(std::string *path,jobject surface) {
         player->mFFmpegEncodeStream = new EncodeNakedStream();
         player->mGlThread = new GlThread();
         pathPlayerMap[*path] = player;
-        player->mFFmpegEncodeStream->openStream(stringToChar(*path).data(),surface);
+        player->mFFmpegEncodeStream->openStream(stringToChar(*path).data());
         player->setupCallback();
     } else {
         result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);

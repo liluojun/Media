@@ -148,7 +148,7 @@ public:
 
     ~EncodeNakedStream();
 
-    bool openStream(const char *path, jobject surface);
+    bool openStream(const char *path);
 
     void addFrame(uint8_t *frame, int type);
 

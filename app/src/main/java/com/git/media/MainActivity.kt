@@ -71,18 +71,12 @@ class MainActivity : AppCompatActivity() {
         Log.e(TAG, "result =$result")
         findViewById<TextView>(R.id.t).setOnClickListener {
             if (result == 0) {
-                val surfaceTexture = SurfaceTexture(0) // texture ID = 0 (dummy)
-
-                surfaceTexture.setDefaultBufferSize(1, 1) // 小尺寸避免资源浪费
-
-                val dummySurface = Surface(surfaceTexture)
-
-                NativeMedia.openStream(path,dummySurface)
+                NativeMedia.openStream(path)
                 NativeMedia.creatSurface(path, Surface(tv.surfaceTexture), width, height)
 
             }
         }
-        findViewById<TextView>(R.id.t1).setOnClickListener { test()/* NativeMedia.closeStream(path) */ }
+        findViewById<TextView>(R.id.t1).setOnClickListener { NativeMedia.closeStream(path)  }
         findViewById<TextView>(R.id.t2).setOnClickListener { NativeMedia.playbackSpeed(path, 2.0) }
         findViewById<TextView>(R.id.t3).setOnClickListener {
             Toast.makeText(this, "保存成功", Toast.LENGTH_SHORT).show()

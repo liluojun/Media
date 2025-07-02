@@ -14,7 +14,7 @@ public class NativeMedia {
         System.loadLibrary("swscale");
     }
 
-    public static native int openStream(String path, Object surface);
+    public static native int openStream(String path);
 
     public static native int closeStream(String path);
 

@@ -278,6 +278,7 @@ int initSoftwareDecoder(InitContext *ctx, NakedFrameData *data) {
     }
 
     LOGI("Software decoder initialized successfully");
+    ctx->isSoftOrHardDecod= false;
     return 0;
 }
 // 初始化硬解器函数
@@ -383,17 +384,19 @@ int initVideoAVCodec(InitContext *ctx, const AVCodec *videoCodec, NakedFrameData
         // 硬解失败时回退软解
         if (!hwSuccess) {
             LOGW("Hardware decoding failed, falling back to software");
+            *lastAVCodecID = data->codecId;
             return initSoftwareDecoder(ctx, data);
         }
 #else
         // 非Android平台直接使用软解
+         *lastAVCodecID = data->codecId;
         return initSoftwareDecoder(ctx, data);
 #endif
     } else {
         // 纯软解模式
+        *lastAVCodecID = data->codecId;
         return initSoftwareDecoder(ctx, data);
     }
-
     *lastAVCodecID = data->codecId;
     return 0;
 }
@@ -580,9 +583,17 @@ void videoThread(InitContext *ctx) {
             pthread_cond_wait(&ctx->readVideoCond, &ctx->readVideoMutex);
         }
         LOGE("1111")
+        if (ctx->videoDecodeCtx->abortRequest || ctx->videoReadDecode.empty()) {
+            pthread_mutex_unlock(&ctx->readVideoMutex);
+            break;
+        }
         NakedFrameData *packet = ctx->videoReadDecode.front();
         ctx->videoReadDecode.pop();
         pthread_mutex_unlock(&ctx->readVideoMutex);
+        if (ctx->videoDecodeCtx->abortRequest) {
+            delete packet;
+            break;
+        }
         if (packet->frameNo == -1) {
             avcodec_send_packet(ctx->videoDecodeCtx->videoCodecCtx, NULL);
         } else {
@@ -773,9 +784,17 @@ void audioThread(InitContext *ctx) {
         while (ctx->audioReadDecode.empty() && !ctx->audioDecodeCtx->abortRequest) {
             pthread_cond_wait(&ctx->readAudioCond, &ctx->readAudioMutex);
         }
+        if (ctx->audioDecodeCtx->abortRequest || ctx->audioReadDecode.empty()) {
+            pthread_mutex_unlock(&ctx->readAudioMutex);
+            break;
+        }
         NakedFrameData *packet = ctx->audioReadDecode.front();
         ctx->audioReadDecode.pop();
         pthread_mutex_unlock(&ctx->readAudioMutex);
+        if (ctx->audioDecodeCtx->abortRequest) {
+            delete packet;
+            break;
+        }
         int ret = initAudioAVCodec(ctx, audioCodec, packet);
         if (ret < 0) {
             LOGE("initVideoAVCodec error=%d", ret)
@@ -864,6 +883,10 @@ void audioRenderThread(InitContext *ctx) {
         while (ctx->audioDecodeCtx->audioDecodeQueue.empty() && !ctx->audioDecodeCtx->playRequest) {
             pthread_cond_wait(&ctx->audioDecodeCtx->audioDecodeEmptyCond,
                               &ctx->audioDecodeCtx->audioDecodeMutex);
+        }
+        if (ctx->audioDecodeCtx->abortRequest || ctx->audioDecodeCtx->audioDecodeQueue.empty()) {
+            pthread_mutex_unlock(&ctx->audioDecodeCtx->audioDecodeMutex);
+            break;
         }
         AudioData audioData = ctx->audioDecodeCtx->audioDecodeQueue.front();
         ctx->audioDecodeCtx->audioDecodeQueue.pop();
@@ -987,7 +1010,7 @@ void saveSurface(InitContext *decodeCtx, jobject surface) {
     decodeCtx->surfaceHolder = new SurfaceHolder(javaVm, env, surface);
 }
 
-bool EncodeNakedStream::openStream(const char *filePath, jobject surface) {
+bool EncodeNakedStream::openStream(const char *filePath) {
     try {
         av_log_set_callback(custom_log_callback);
         av_log_set_level(AV_LOG_DEBUG);
@@ -1001,7 +1024,7 @@ bool EncodeNakedStream::openStream(const char *filePath, jobject surface) {
         decodeCtx->audioDecodeCtx = new AudioDecodeContext();
         decodeCtx->audioDecodeCtx->init();
         decodeCtx->videoDecodeCtx->frameCallback = frameCallback;
-        saveSurface(decodeCtx, surface);
+        //saveSurface(decodeCtx, surface);
 
         decodeCtx->videoDecodeCtx->videoDecodeThread = std::thread(videoThread, decodeCtx);
         decodeCtx->videoDecodeCtx->videoRendderThread = std::thread(videoRenderThread, decodeCtx);
@@ -1020,6 +1043,25 @@ bool EncodeNakedStream::openStream(const char *filePath, jobject surface) {
 void EncodeNakedStream::closeStream() {
     if (decodeCtx) {
         decodeCtx->abortRequest = true; // 添加终止标志
+        if (decodeCtx->videoDecodeCtx) {
+            decodeCtx->videoDecodeCtx->abortRequest = true;
+            decodeCtx->videoDecodeCtx->renderRequest = true;
+
+            // 唤醒等待帧队列的线程
+            pthread_cond_broadcast(&decodeCtx->videoDecodeCtx->viedoDecodeFullCond);
+            pthread_cond_broadcast(&decodeCtx->videoDecodeCtx->viedoDecodeEmptyCond);
+        }
+        if (decodeCtx->audioDecodeCtx) {
+            decodeCtx->audioDecodeCtx->abortRequest = true;
+            decodeCtx->audioDecodeCtx->playRequest = true;
+            // 唤醒等待音频队列的线程
+            pthread_cond_broadcast(&decodeCtx->audioDecodeCtx->audioDecodeFullCond);
+            pthread_cond_broadcast(&decodeCtx->audioDecodeCtx->audioDecodeEmptyCond);
+        }
+
+        // 唤醒读线程中的 cond wait
+        pthread_cond_broadcast(&decodeCtx->readVideoCond);
+        pthread_cond_broadcast(&decodeCtx->readAudioCond);
         if (workerThread.joinable()) {
             workerThread.join(); // 替换 pthread_join
         }
@@ -1029,7 +1071,7 @@ void EncodeNakedStream::closeStream() {
         }
         delete decodeCtx;
         decodeCtx = nullptr;
-
+        LOGE("closeStream")
     }
 }
 

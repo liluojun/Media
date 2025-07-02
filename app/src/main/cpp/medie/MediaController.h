@@ -137,7 +137,7 @@ extern "C" {
 #endif
 class MediaController {
 public:
-    int openStream(std::string *path,jobject surface);
+    int openStream(std::string *path);
 
     const char *creatM3u8File(std::string *path, const char *tsList);
 
