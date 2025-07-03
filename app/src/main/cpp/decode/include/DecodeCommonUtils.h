@@ -7,7 +7,6 @@
 extern "C" {
 #include "../ffmpeg/include/libavutil/frame.h"
 }
-
 #include "../yuv/include/libyuv.h"
 #include <cstring> // for memset
 
