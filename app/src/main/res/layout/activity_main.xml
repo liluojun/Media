@@ -74,8 +74,22 @@
         android:layout_marginBottom="8dp"
         android:background="@color/base_color"
         android:gravity="center"
-        android:text="截图"
+        android:text="4x"
         android:textColor="@color/white"
         app:layout_constraintLeft_toRightOf="@id/t2"
         app:layout_constraintTop_toTopOf="@id/t" />
+
+    <TextView
+        android:id="@+id/t4"
+        android:layout_width="80dp"
+        android:layout_height="50dp"
+        android:layout_marginLeft="8dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:background="@color/base_color"
+        android:gravity="center"
+        android:text="截图"
+        android:textColor="@color/white"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/t" />
 </androidx.constraintlayout.widget.ConstraintLayout>

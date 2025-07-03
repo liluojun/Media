@@ -79,6 +79,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.t1).setOnClickListener { NativeMedia.closeStream(path)  }
         findViewById<TextView>(R.id.t2).setOnClickListener { NativeMedia.playbackSpeed(path, 2.0) }
         findViewById<TextView>(R.id.t3).setOnClickListener {
+            NativeMedia.playbackSpeed(path, 4.0)
+        }
+        findViewById<TextView>(R.id.t4).setOnClickListener {
             Toast.makeText(this, "保存成功", Toast.LENGTH_SHORT).show()
             picPath = "/storage/emulated/0/Android/data/com.git.media/files/${System.currentTimeMillis()}.png"
             NativeMedia.screenshot(path, picPath)

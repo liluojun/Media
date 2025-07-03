@@ -192,6 +192,7 @@ void buildAvccExtradata(const std::vector<uint8_t> &sps,
 
     return;
 }
+
 // 辅助函数：设置编解码器extra data
 void setCodecExtraData(AVCodecContext *codecCtx, NakedFrameData *data) {
     CodecExtraData extra = parseSpsPpsVpsFromIFrame(data->data, data->size, data->codecId);
@@ -511,6 +512,7 @@ void videoRenderThread(InitContext *ctx) {
             frame->pts = ctx->videoDecodeCtx->frame_count;
             ctx->videoDecodeCtx->frame_count++;
         }
+
         if (!ctx->videoDecodeCtx->syncClockInitialized) {
             ctx->syncClock->init((int64_t) (pts * AV_TIME_BASE));
             ctx->videoDecodeCtx->syncClockInitialized = true;
@@ -610,6 +612,12 @@ void audioThread(InitContext *ctx) {
                     frame->channels;
             AudioData nakedFrameData;
             if (ctx->syncClock->getPlaybackSpeed() != 1) {
+                double speed = ctx->syncClock->getPlaybackSpeed();
+                // 每次处理前先保存旧的 PTS
+                int64_t oldPts = ctx->audioDecodeCtx->pts;
+                // 每一帧原始时间（不变）
+                int64_t originalDurationUs = (frame->nb_samples * AV_TIME_BASE) / frame->sample_rate;
+
                 sonicWriteShortToStream(ctx->audioDecodeCtx->sonicStream,
                                         (int16_t *) frame->data[0],
                                         frame->nb_samples * frame->channels);
@@ -622,13 +630,10 @@ void audioThread(InitContext *ctx) {
                     memcpy(buffer, outBuf, dataSize);
                     nakedFrameData.data = buffer;
                     nakedFrameData.size = dataSize;
-                    // 计算变速后时长，除以 speed
-                    int64_t durationUs = static_cast<int64_t>((samplesOut / frame->channels) *
-                                                              AV_TIME_BASE /
-                                                              ctx->syncClock->getPlaybackSpeed());
+                    // 注意：PTS 不受变速影响，仍按原始时间线推进
                     nakedFrameData.pts = ctx->audioDecodeCtx->pts;
-                    ctx->audioDecodeCtx->pts += durationUs;
-                    // LOGE("倍速播放 %d   %d",nakedFrameData.pts,ctx->audioDecodeCtx->pts)
+                    // 注意推进的是“原始帧”的 duration，而不是变速后的 samplesOut
+                    ctx->audioDecodeCtx->pts += originalDurationUs;
                     pthread_mutex_lock(&ctx->audioDecodeCtx->audioDecodeMutex);
                     while (ctx->audioDecodeCtx->audioDecodeQueue.size() >=
                            ctx->audioDecodeCtx->MAX_AUDIO_FRAME &&
@@ -685,6 +690,7 @@ void audioRenderThread(InitContext *ctx) {
         pthread_cond_signal(&ctx->audioDecodeCtx->audioDecodeFullCond);
         pthread_mutex_unlock(&ctx->audioDecodeCtx->audioDecodeMutex);
         ctx->audioClock = audioData.pts;// +
+
         int64_t deltaUs = ctx->syncClock->syncAudio(audioData.pts);
         LOGE("pts* videoClock=%d   audioClock=%d deltaUs=%d", ctx->videoClock, ctx->audioClock,
              deltaUs)
