@@ -21,7 +21,7 @@ public:
 
     // 写入 PCM 数据（需自行管理数据缓冲）
     void writeData(const void *data, size_t size);
-
+    void clearData();
     // 音频流回调接口
     oboe::DataCallbackResult onAudioReady(
             oboe::AudioStream *audioStream,

@@ -39,7 +39,6 @@ bool AudioPlayer::startPlayback(int sampleRate, int channelCount, oboe::AudioFor
 }
 
 void AudioPlayer::stopPlayback() {
-
     if (mPlaybackStream) {
         mPlaybackStream->stop();
         mPlaybackStream->close();
@@ -50,8 +49,13 @@ void AudioPlayer::stopPlayback() {
 // 外部写入 PCM 数据到缓冲区
 void AudioPlayer::writeData(const void *data, size_t size) {
     std::lock_guard<std::mutex> lock(mDataMutex);
-    const uint8_t *src = static_cast<const uint8_t*>(data);
+    const uint8_t *src = static_cast<const uint8_t *>(data);
     mPCMBuffer.insert(mPCMBuffer.end(), src, src + size);
+}
+
+void AudioPlayer::clearData() {
+    std::lock_guard<std::mutex> lock(mDataMutex);
+    mPCMBuffer.clear();
 }
 
 // 音频回调：填充数据到音频设备
@@ -64,7 +68,7 @@ oboe::DataCallbackResult AudioPlayer::onAudioReady(
     }
     size_t bytesPerFrame = audioStream->getBytesPerFrame();
     size_t requestSize = numFrames * bytesPerFrame;
-    uint8_t *dst = static_cast<uint8_t*>(audioData);
+    uint8_t *dst = static_cast<uint8_t *>(audioData);
 
     std::lock_guard<std::mutex> lock(mDataMutex);
     // 检查缓冲区是否有足够数据

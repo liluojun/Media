@@ -612,11 +612,9 @@ void audioThread(InitContext *ctx) {
                     frame->channels;
             AudioData nakedFrameData;
             if (ctx->syncClock->getPlaybackSpeed() != 1) {
-                double speed = ctx->syncClock->getPlaybackSpeed();
-                // 每次处理前先保存旧的 PTS
-                int64_t oldPts = ctx->audioDecodeCtx->pts;
                 // 每一帧原始时间（不变）
-                int64_t originalDurationUs = (frame->nb_samples * AV_TIME_BASE) / frame->sample_rate;
+                int64_t originalDurationUs =
+                        (frame->nb_samples * AV_TIME_BASE) / frame->sample_rate;
 
                 sonicWriteShortToStream(ctx->audioDecodeCtx->sonicStream,
                                         (int16_t *) frame->data[0],
@@ -821,13 +819,17 @@ bool EncodeNakedStream::openStream(const char *filePath) {
         decodeCtx->audioDecodeCtx = new AudioDecodeContext();
         decodeCtx->audioDecodeCtx->init();
         decodeCtx->videoDecodeCtx->frameCallback = frameCallback;
-        //saveSurface(decodeCtx, surface);
 
         decodeCtx->videoDecodeCtx->videoDecodeThread = std::thread(videoThread, decodeCtx);
         decodeCtx->videoDecodeCtx->videoRendderThread = std::thread(videoRenderThread, decodeCtx);
         decodeCtx->audioDecodeCtx->audioDecodeThread = std::thread(audioThread, decodeCtx);
         decodeCtx->audioDecodeCtx->audioRendderThread = std::thread(audioRenderThread, decodeCtx);
         workerThread = std::thread(readThread, decodeCtx);
+//        double speed=2.0;
+//        decodeCtx->syncClock->setPlaybackSpeed(speed);
+//        if ((speed >= 0.5 || speed <= 2) && speed != 1 && decodeCtx->audioDecodeCtx->sonicStream) {
+//            sonicSetSpeed(decodeCtx->audioDecodeCtx->sonicStream, speed);
+//        }
     } catch (const std::system_error &e) {
         delete decodeCtx;
         decodeCtx = nullptr;
@@ -885,6 +887,10 @@ bool EncodeNakedStream::playbackSpeed(double speed) {
         if ((speed >= 0.5 || speed <= 2) && speed != 1 && decodeCtx->audioDecodeCtx->sonicStream) {
             sonicSetSpeed(decodeCtx->audioDecodeCtx->sonicStream, speed);
         }
+        if (decodeCtx->audioPlayer) {
+            decodeCtx->audioPlayer->clearData();
+        }
+        avcodec_flush_buffers(decodeCtx->audioDecodeCtx->audioDecodeCtx);
         return true;
     } else {
         return false;
