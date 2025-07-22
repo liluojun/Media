@@ -30,7 +30,11 @@
 
 #include <android/native_window.h>
 #include <media/NdkImageReader.h>
-
+enum class InputSourceType {
+    FromFile=0,
+    FromExternal=1,
+    FromRtspOrRtmp=2
+};
 struct OffscreenSurface {
     AImageReader *image_reader = nullptr;
     ANativeWindow *surface = nullptr;
@@ -98,7 +102,7 @@ typedef struct InitContext {
     bool isSoftOrHardDecod = true;
     std::shared_ptr<AVSyncClock> syncClock;
     SurfaceHolder *surfaceHolder = nullptr;
-
+    InputSourceType inputType = InputSourceType::FromFile;
 
     void audioInitFailClean() {
         pthread_mutex_lock(&readAudioMutex);
@@ -143,16 +147,15 @@ private:
     InitContext *decodeCtx = nullptr;
     FrameCallback *frameCallback = nullptr;
     std::thread workerThread;
-
+    void pushFrame(NakedFrameData* data);
 public:
     EncodeNakedStream();
 
     ~EncodeNakedStream();
 
-    bool openStream(const char *path);
+    bool openStream(const char *path,int streamType);
 
-    void addFrame(uint8_t *frame, int type);
-
+    void pushFrameRaw(const uint8_t* buffer, size_t totalSize);
     void setFrameCallback(FrameCallback *callback);
 
     bool playbackSpeed(double speed);

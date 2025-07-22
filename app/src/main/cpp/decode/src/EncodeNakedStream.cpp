@@ -712,7 +712,7 @@ void audioRenderThread(InitContext *ctx) {
     return;
 }
 
-void readThread(InitContext *ctx) {
+void readThreadFromFile(InitContext *ctx) {
     while (!ctx->abortRequest) {
         if (ctx->filePath) {
             ifstream file(ctx->filePath, ios::binary);
@@ -778,6 +778,97 @@ void readThread(InitContext *ctx) {
     return;
 }
 
+
+
+void readThreadFromRtsp(InitContext *ctx) {
+    AVFormatContext *fmtCtx = nullptr;
+    if (avformat_open_input(&fmtCtx, ctx->filePath, nullptr, nullptr) < 0) {
+        LOGE("Failed to open RTSP/RTMP stream");
+        return;
+    }
+
+    if (avformat_find_stream_info(fmtCtx, nullptr) < 0) {
+        LOGE("Failed to get stream info");
+        avformat_close_input(&fmtCtx);
+        return;
+    }
+
+    // 提取音视频流index
+    int videoIndex = -1, audioIndex = -1;
+    for (int i = 0; i < fmtCtx->nb_streams; i++) {
+        if (fmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
+            videoIndex = i;
+        else if (fmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+            audioIndex = i;
+    }
+    AVPacket packet;
+    while (!ctx->abortRequest && av_read_frame(fmtCtx, &packet) == 0) {
+        if (packet.stream_index == videoIndex || packet.stream_index == audioIndex) {
+            NakedFrameData *data = new NakedFrameData();
+            data->size = packet.size;
+            data->data = (uint8_t *) av_malloc(packet.size);
+            memcpy(data->data, packet.data, packet.size);
+            data->pts = packet.pts;
+            data->frametype = (packet.stream_index == videoIndex) ? PktPFrames : PktAudioFrames;
+            if (packet.stream_index == videoIndex) {
+                pthread_mutex_lock(&ctx->readVideoMutex);
+                ctx->videoReadDecode.push(data);
+                pthread_cond_signal(&ctx->readVideoCond);
+                pthread_mutex_unlock(&ctx->readVideoMutex);
+            } else {
+                pthread_mutex_lock(&ctx->readAudioMutex);
+                ctx->audioReadDecode.push(data);
+                pthread_cond_signal(&ctx->readAudioCond);
+                pthread_mutex_unlock(&ctx->readAudioMutex);
+            }
+        }
+        av_packet_unref(&packet);
+    }
+
+    avformat_close_input(&fmtCtx);
+}
+void EncodeNakedStream::pushFrame(NakedFrameData* data) {
+    if (!decodeCtx) return;
+
+    if (data->frametype == PktIFrames || data->frametype == PktPFrames) {
+        pthread_mutex_lock(&decodeCtx->readVideoMutex);
+        decodeCtx->videoReadDecode.push(data);
+        pthread_cond_signal(&decodeCtx->readVideoCond);
+        pthread_mutex_unlock(&decodeCtx->readVideoMutex);
+    } else if (data->frametype == PktAudioFrames) {
+        pthread_mutex_lock(&decodeCtx->readAudioMutex);
+        decodeCtx->audioReadDecode.push(data);
+        pthread_cond_signal(&decodeCtx->readAudioCond);
+        pthread_mutex_unlock(&decodeCtx->readAudioMutex);
+    } else {
+        delete data;
+    }
+}
+void EncodeNakedStream::pushFrameRaw(const uint8_t* buffer, size_t totalSize) {
+    if (!decodeCtx || totalSize < 36) return;
+
+    NakedFrameData* data = new NakedFrameData();
+
+    // 解析前36字节 header
+    std::vector<uint8_t> header(buffer, buffer + 36);
+    if (!parseHeader(header, data)) {
+        LOGE("外部推送帧头解析失败");
+        delete data;
+        return;
+    }
+
+    if (totalSize < 36 + data->size) {
+        LOGE("外部帧数据大小不足：total=%zu, expected=%d", totalSize, 36 + data->size);
+        delete data;
+        return;
+    }
+    // 拷贝数据体
+    memcpy(data->data, buffer + 36, data->size);
+    // 送入解码队列
+    pushFrame(data);
+}
+
+
 void custom_log_callback(void *ptr, int level, const char *fmt, va_list vl) {
     if (level <= av_log_get_level()) {
         char buffer[1024];
@@ -805,13 +896,12 @@ void saveSurface(InitContext *decodeCtx, jobject surface) {
     decodeCtx->surfaceHolder = new SurfaceHolder(javaVm, env, surface);
 }
 
-bool EncodeNakedStream::openStream(const char *filePath) {
+bool EncodeNakedStream::openStream(const char *filePath,int streamType) {
     try {
-//        av_log_set_callback(custom_log_callback);
-//        av_log_set_level(AV_LOG_DEBUG);
         closeStream();
         decodeCtx = new InitContext();
         decodeCtx->init();
+        decodeCtx->inputType=static_cast<InputSourceType>(streamType);
         decodeCtx->filePath = av_strdup(filePath);
         decodeCtx->videoDecodeCtx = new VideoDecodeContext();
         decodeCtx->videoDecodeCtx->init();
@@ -824,12 +914,18 @@ bool EncodeNakedStream::openStream(const char *filePath) {
         decodeCtx->videoDecodeCtx->videoRendderThread = std::thread(videoRenderThread, decodeCtx);
         decodeCtx->audioDecodeCtx->audioDecodeThread = std::thread(audioThread, decodeCtx);
         decodeCtx->audioDecodeCtx->audioRendderThread = std::thread(audioRenderThread, decodeCtx);
-        workerThread = std::thread(readThread, decodeCtx);
-//        double speed=2.0;
-//        decodeCtx->syncClock->setPlaybackSpeed(speed);
-//        if ((speed >= 0.5 || speed <= 2) && speed != 1 && decodeCtx->audioDecodeCtx->sonicStream) {
-//            sonicSetSpeed(decodeCtx->audioDecodeCtx->sonicStream, speed);
-//        }
+
+        switch ( decodeCtx->inputType) {
+            case InputSourceType::FromFile: {
+                workerThread = std::thread(readThreadFromFile, decodeCtx);
+            }
+            case InputSourceType::FromExternal: {
+
+            }
+            case InputSourceType::FromRtspOrRtmp: {
+                workerThread = std::thread(readThreadFromRtsp, decodeCtx);
+            }
+        }
     } catch (const std::system_error &e) {
         delete decodeCtx;
         decodeCtx = nullptr;

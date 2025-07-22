@@ -27,8 +27,13 @@ class MainActivity : AppCompatActivity() {
         var goodPath: String? = null;
         val json =
             "[{\"time\":10.0,\"url\":\"video_0.ts\"},{\"time\":2.08,\"url\":\"video_1.ts\"}]"
-        var picPath = "/storage/emulated/0/Android/data/com.git.media/files/${System.currentTimeMillis()}.png"
-        val uuid =UUID.randomUUID().toString()
+        var picPath =
+            "/storage/emulated/0/Android/data/com.git.media/files/${System.currentTimeMillis()}.png"
+        val uuid = UUID.randomUUID().toString()
+        const val FromFile = 0
+        const val FromExternal = 1
+        const val FromRtspOrRtmp = 2
+        val streamType = FromFile
     }
 
     var width: Int = 0
@@ -51,12 +56,20 @@ class MainActivity : AppCompatActivity() {
          }*/
         tv = findViewById<TextureView>(R.id.tv)
         tv.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-            override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+            override fun onSurfaceTextureAvailable(
+                surface: SurfaceTexture,
+                width: Int,
+                height: Int
+            ) {
                 this@MainActivity.width = width
                 this@MainActivity.height = height
             }
 
-            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
+            override fun onSurfaceTextureSizeChanged(
+                surface: SurfaceTexture,
+                width: Int,
+                height: Int
+            ) {
                 NativeMedia.changeSurfaceSize(path, width, height)
             }
 
@@ -73,19 +86,20 @@ class MainActivity : AppCompatActivity() {
         Log.e(TAG, "result =$result")
         findViewById<TextView>(R.id.t).setOnClickListener {
             if (result == 0) {
-                NativeMedia.openStream(uuid,path)
+                NativeMedia.openStream(uuid, path, streamType)
                 NativeMedia.creatSurface(uuid, Surface(tv.surfaceTexture), width, height)
 
             }
         }
-        findViewById<TextView>(R.id.t1).setOnClickListener { NativeMedia.closeStream(uuid)  }
+        findViewById<TextView>(R.id.t1).setOnClickListener { NativeMedia.closeStream(uuid) }
         findViewById<TextView>(R.id.t2).setOnClickListener { NativeMedia.playbackSpeed(uuid, 2.0) }
         findViewById<TextView>(R.id.t3).setOnClickListener {
             NativeMedia.playbackSpeed(uuid, 4.0)
         }
         findViewById<TextView>(R.id.t4).setOnClickListener {
             Toast.makeText(this, "保存成功", Toast.LENGTH_SHORT).show()
-            picPath = "/storage/emulated/0/Android/data/com.git.media/files/${System.currentTimeMillis()}.png"
+            picPath =
+                "/storage/emulated/0/Android/data/com.git.media/files/${System.currentTimeMillis()}.png"
             NativeMedia.screenshot(uuid, picPath)
         }
 

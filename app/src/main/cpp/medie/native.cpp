@@ -15,7 +15,7 @@ extern "C" {
 static const char *lpClassPathName = "com/git/media/NativeMedia";
 static const JNINativeMethod nativeMethod[] = {
         // Java中的函数名                            函数签名信息                                         native的函数指针
-        {"openStream",        "(Ljava/lang/String;Ljava/lang/String;)I",                                    (void *) (openStream)},
+        {"openStream",        "(Ljava/lang/String;Ljava/lang/String;I)I",                                    (void *) (openStream)},
         {"closeStream",       "(Ljava/lang/String;)I",                                    (void *) (closeStream)},
         {"screenshot",        "(Ljava/lang/String;Ljava/lang/String;)I",                  (void *) (screenshot)},
         {"creatSurface",      "(Ljava/lang/String;Ljava/lang/Object;II)I",                (void *) (creatSurface)},
@@ -25,6 +25,7 @@ static const JNINativeMethod nativeMethod[] = {
         {"creatM3u8File",     "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;", (void *) (creatM3u8File)},
         {"m3u8ToMp4",         "(Ljava/lang/String;Ljava/lang/String;)I",                  (void *) (m3u8ToMp4)},
         {"playbackSpeed",     "(Ljava/lang/String;D)I",                                   (void *) (playbackSpeed)},
+        {"pushFrameRaw",     "(Ljava/lang/String;[B)I",                                   (void *) (pushFrameRaw)},
 };
 MediaController *mediaController = NULL;
 
@@ -58,13 +59,29 @@ JNIEXPORT jint JNICALL init(JNIEnv *env, jobject thiz) {
     return 0;
 }
 
-JNIEXPORT jint JNICALL openStream(JNIEnv *env, jobject thiz, jstring uuid,jstring path) {
+JNIEXPORT jint JNICALL openStream(JNIEnv *env, jobject thiz, jstring uuid,jstring path,int streamType) {
     jint result = 0;
     if (NULL != mediaController) {
         LOGE("JNIEnv from Java call: %p", env);
         std::string pStr = JStringToStdString(env, path);
         std::string uStr = JStringToStdString(env, uuid);
-        result = mediaController->openStream(&uStr,&pStr);
+        result = mediaController->openStream(&uStr,&pStr,streamType);
+    } else {
+        LOGE("mediaController is null");
+        result = -1;
+    }
+    return result;
+}
+JNIEXPORT jint JNICALL pushFrameRaw(JNIEnv *env, jobject thiz, jstring uuid, jbyteArray inputArray) {
+    jint result = 0;
+    if (NULL != mediaController) {
+        std::string pStr = JStringToStdString(env, uuid);
+        jbyte* bytePtr = env->GetByteArrayElements(inputArray, nullptr);
+        jsize length = env->GetArrayLength(inputArray);
+
+        const uint8_t* data = reinterpret_cast<const uint8_t*>(bytePtr);
+        result = mediaController->pushFrameRaw(&pStr,data,length);
+        env->ReleaseByteArrayElements(inputArray, bytePtr, JNI_ABORT);
     } else {
         LOGE("mediaController is null");
         result = -1;

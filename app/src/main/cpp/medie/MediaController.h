@@ -137,7 +137,7 @@ extern "C" {
 #endif
 class MediaController {
 public:
-    int openStream(std::string *uuid,std::string *path);
+    int openStream(std::string *uuid,std::string *path,int streamType);
 
     const char *creatM3u8File(std::string *path, const char *tsList);
 
@@ -155,6 +155,7 @@ public:
 
     int screenshot(std::string *uuid, std::string *imagePath);
 
+    int pushFrameRaw(std::string *uuid,const uint8_t* buffer, size_t totalSize);
 
     ~MediaController();
 

@@ -10,7 +10,8 @@ extern "C"
 {
 #endif
 
-JNIEXPORT jint JNICALL openStream(JNIEnv *env, jobject thiz, jstring uuid, jstring path);
+JNIEXPORT jint JNICALL openStream(JNIEnv *env, jobject thiz, jstring uuid, jstring path,jint streamType);
+JNIEXPORT jint JNICALL pushFrameRaw(JNIEnv *env, jobject thiz, jstring uuid, jbyteArray data);
 JNIEXPORT jint JNICALL
 creatSurface(JNIEnv *env, jobject thiz, jstring uuid, jobject mWindow, jint w, jint h);
 

@@ -3,7 +3,7 @@
 //
 #include "MediaController.h"
 
-int MediaController::openStream(std::string *uuid,std::string *path) {
+int MediaController::openStream(std::string *uuid, std::string *path,int streamType) {
     int result = 0;
     auto it = pathPlayerMap.find(*uuid);
     if (it == pathPlayerMap.end()) {
@@ -11,8 +11,20 @@ int MediaController::openStream(std::string *uuid,std::string *path) {
         player->mFFmpegEncodeStream = new EncodeNakedStream();
         player->mGlThread = new GlThread();
         pathPlayerMap[*uuid] = player;
-        player->mFFmpegEncodeStream->openStream(stringToChar(*path).data());
+        player->mFFmpegEncodeStream->openStream(stringToChar(*path).data(),streamType);
         player->setupCallback();
+    } else {
+        result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
+        LOGE("Player for path %s already exists", uuid);
+    }
+    return result;
+}
+
+int MediaController::pushFrameRaw(std::string *uuid, const uint8_t *buffer, size_t totalSize) {
+    int result = 0;
+    auto it = pathPlayerMap.find(*uuid);
+    if (it == pathPlayerMap.end()) {
+        it->second->mFFmpegEncodeStream->pushFrameRaw(buffer, totalSize);
     } else {
         result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
         LOGE("Player for path %s already exists", uuid);
