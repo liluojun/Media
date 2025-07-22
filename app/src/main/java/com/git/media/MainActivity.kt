@@ -15,6 +15,7 @@ import java.io.File
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.UUID
 
 
 class MainActivity : AppCompatActivity() {
@@ -27,6 +28,7 @@ class MainActivity : AppCompatActivity() {
         val json =
             "[{\"time\":10.0,\"url\":\"video_0.ts\"},{\"time\":2.08,\"url\":\"video_1.ts\"}]"
         var picPath = "/storage/emulated/0/Android/data/com.git.media/files/${System.currentTimeMillis()}.png"
+        val uuid =UUID.randomUUID().toString()
     }
 
     var width: Int = 0
@@ -71,20 +73,20 @@ class MainActivity : AppCompatActivity() {
         Log.e(TAG, "result =$result")
         findViewById<TextView>(R.id.t).setOnClickListener {
             if (result == 0) {
-                NativeMedia.openStream(path)
-                NativeMedia.creatSurface(path, Surface(tv.surfaceTexture), width, height)
+                NativeMedia.openStream(uuid,path)
+                NativeMedia.creatSurface(uuid, Surface(tv.surfaceTexture), width, height)
 
             }
         }
-        findViewById<TextView>(R.id.t1).setOnClickListener { NativeMedia.closeStream(path)  }
-        findViewById<TextView>(R.id.t2).setOnClickListener { NativeMedia.playbackSpeed(path, 2.0) }
+        findViewById<TextView>(R.id.t1).setOnClickListener { NativeMedia.closeStream(uuid)  }
+        findViewById<TextView>(R.id.t2).setOnClickListener { NativeMedia.playbackSpeed(uuid, 2.0) }
         findViewById<TextView>(R.id.t3).setOnClickListener {
-            NativeMedia.playbackSpeed(path, 4.0)
+            NativeMedia.playbackSpeed(uuid, 4.0)
         }
         findViewById<TextView>(R.id.t4).setOnClickListener {
             Toast.makeText(this, "保存成功", Toast.LENGTH_SHORT).show()
             picPath = "/storage/emulated/0/Android/data/com.git.media/files/${System.currentTimeMillis()}.png"
-            NativeMedia.screenshot(path, picPath)
+            NativeMedia.screenshot(uuid, picPath)
         }
 
     }

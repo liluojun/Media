@@ -137,23 +137,23 @@ extern "C" {
 #endif
 class MediaController {
 public:
-    int openStream(std::string *path);
+    int openStream(std::string *uuid,std::string *path);
 
     const char *creatM3u8File(std::string *path, const char *tsList);
 
     int m3u8ToMp4(const char *input_path, const char *output_path);
 
-    int creatSurface(std::string *path, ANativeWindow *mWindow, int w, int h);
+    int creatSurface(std::string *uuid, ANativeWindow *mWindow, int w, int h);
 
-    int destorySurface(std::string *path);
+    int destorySurface(std::string *uuid);
 
-    int changeSurfaceSize(std::string *path, int w, int h);
+    int changeSurfaceSize(std::string *uuid, int w, int h);
 
-    int closeStream(std::string *path);
+    int closeStream(std::string *uuid);
 
-    int playbackSpeed(std::string *path, double speed);
+    int playbackSpeed(std::string *uuid, double speed);
 
-    int screenshot(std::string *path, std::string *imagePath);
+    int screenshot(std::string *uuid, std::string *imagePath);
 
 
     ~MediaController();

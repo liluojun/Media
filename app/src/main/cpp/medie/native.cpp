@@ -15,7 +15,7 @@ extern "C" {
 static const char *lpClassPathName = "com/git/media/NativeMedia";
 static const JNINativeMethod nativeMethod[] = {
         // Java中的函数名                            函数签名信息                                         native的函数指针
-        {"openStream",        "(Ljava/lang/String;)I",                                    (void *) (openStream)},
+        {"openStream",        "(Ljava/lang/String;Ljava/lang/String;)I",                                    (void *) (openStream)},
         {"closeStream",       "(Ljava/lang/String;)I",                                    (void *) (closeStream)},
         {"screenshot",        "(Ljava/lang/String;Ljava/lang/String;)I",                  (void *) (screenshot)},
         {"creatSurface",      "(Ljava/lang/String;Ljava/lang/Object;II)I",                (void *) (creatSurface)},
@@ -58,12 +58,13 @@ JNIEXPORT jint JNICALL init(JNIEnv *env, jobject thiz) {
     return 0;
 }
 
-JNIEXPORT jint JNICALL openStream(JNIEnv *env, jobject thiz, jstring path) {
+JNIEXPORT jint JNICALL openStream(JNIEnv *env, jobject thiz, jstring uuid,jstring path) {
     jint result = 0;
     if (NULL != mediaController) {
         LOGE("JNIEnv from Java call: %p", env);
         std::string pStr = JStringToStdString(env, path);
-        result = mediaController->openStream(&pStr);
+        std::string uStr = JStringToStdString(env, uuid);
+        result = mediaController->openStream(&uStr,&pStr);
     } else {
         LOGE("mediaController is null");
         result = -1;
@@ -72,10 +73,10 @@ JNIEXPORT jint JNICALL openStream(JNIEnv *env, jobject thiz, jstring path) {
 }
 
 JNIEXPORT jint JNICALL
-creatSurface(JNIEnv *env, jobject thiz, jstring path, jobject mWindow, jint w, jint h) {
+creatSurface(JNIEnv *env, jobject thiz, jstring uuid, jobject mWindow, jint w, jint h) {
     jint result = 0;
     if (NULL != mediaController) {
-        std::string pStr = JStringToStdString(env, path);
+        std::string pStr = JStringToStdString(env, uuid);
         ANativeWindow *mSurface = ANativeWindow_fromSurface(env, mWindow);
         result = mediaController->creatSurface(&pStr, mSurface, w, h);
     } else {
@@ -85,10 +86,10 @@ creatSurface(JNIEnv *env, jobject thiz, jstring path, jobject mWindow, jint w, j
     return result;
 }
 
-JNIEXPORT jint JNICALL destorySurface(JNIEnv *env, jobject thiz, jstring path) {
+JNIEXPORT jint JNICALL destorySurface(JNIEnv *env, jobject thiz, jstring uuid) {
     jint result = 0;
     if (NULL != mediaController) {
-        std::string pStr = JStringToStdString(env, path);
+        std::string pStr = JStringToStdString(env, uuid);
         result = mediaController->destorySurface(&pStr);
     } else {
         LOGE("mediaController is null");
@@ -119,10 +120,10 @@ JNIEXPORT jint JNICALL m3u8ToMp4(JNIEnv *env, jobject thiz, jstring path, jstrin
     }
 
 }
-JNIEXPORT jint JNICALL changeSurfaceSize(JNIEnv *env, jobject thiz, jstring path, jint w, jint h) {
+JNIEXPORT jint JNICALL changeSurfaceSize(JNIEnv *env, jobject thiz, jstring uuid, jint w, jint h) {
     jint result = 0;
     if (NULL != mediaController) {
-        std::string pStr = JStringToStdString(env, path);
+        std::string pStr = JStringToStdString(env, uuid);
         result = mediaController->changeSurfaceSize(&pStr, w, h);
     } else {
         LOGE("mediaController is null");
@@ -131,10 +132,10 @@ JNIEXPORT jint JNICALL changeSurfaceSize(JNIEnv *env, jobject thiz, jstring path
     return result;
 }
 
-JNIEXPORT jint JNICALL closeStream(JNIEnv *env, jobject thiz, jstring path) {
+JNIEXPORT jint JNICALL closeStream(JNIEnv *env, jobject thiz, jstring uuid) {
     jint result = 0;
     if (NULL != mediaController) {
-        std::string pStr = JStringToStdString(env, path);
+        std::string pStr = JStringToStdString(env, uuid);
         result = mediaController->closeStream(&pStr);
     } else {
         LOGE("mediaController is null");
@@ -142,10 +143,10 @@ JNIEXPORT jint JNICALL closeStream(JNIEnv *env, jobject thiz, jstring path) {
     }
     return result;
 }
-JNIEXPORT jint JNICALL playbackSpeed(JNIEnv *env, jobject thiz, jstring path, jdouble speed) {
+JNIEXPORT jint JNICALL playbackSpeed(JNIEnv *env, jobject thiz, jstring uuid, jdouble speed) {
     jint result = 0;
     if (NULL != mediaController) {
-        std::string pStr = JStringToStdString(env, path);
+        std::string pStr = JStringToStdString(env, uuid);
         result = mediaController->playbackSpeed(&pStr, speed);
     } else {
         LOGE("mediaController is null");
@@ -153,10 +154,10 @@ JNIEXPORT jint JNICALL playbackSpeed(JNIEnv *env, jobject thiz, jstring path, jd
     }
     return result;
 }
-JNIEXPORT jint JNICALL screenshot(JNIEnv *env, jobject thiz, jstring path, jstring imagePath) {
+JNIEXPORT jint JNICALL screenshot(JNIEnv *env, jobject thiz, jstring uuid, jstring imagePath) {
     jint result = 0;
     if (NULL != mediaController) {
-        std::string pStr = JStringToStdString(env, path);
+        std::string pStr = JStringToStdString(env, uuid);
         std::string imageStr = JStringToStdString(env, imagePath);
         LOGE("screenshot path %s", imageStr.c_str());
         result = mediaController->screenshot(&pStr, &imageStr);

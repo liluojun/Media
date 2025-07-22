@@ -3,77 +3,75 @@
 //
 #include "MediaController.h"
 
-int MediaController::openStream(std::string *path) {
+int MediaController::openStream(std::string *uuid,std::string *path) {
     int result = 0;
-    auto it = pathPlayerMap.find(*path);
+    auto it = pathPlayerMap.find(*uuid);
     if (it == pathPlayerMap.end()) {
         Player *player = new Player();
-        //player->mFFmpegEncodeStream = new EncodeStream2();
-
         player->mFFmpegEncodeStream = new EncodeNakedStream();
         player->mGlThread = new GlThread();
-        pathPlayerMap[*path] = player;
+        pathPlayerMap[*uuid] = player;
         player->mFFmpegEncodeStream->openStream(stringToChar(*path).data());
         player->setupCallback();
     } else {
         result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
-        LOGE("Player for path %s already exists", path);
+        LOGE("Player for path %s already exists", uuid);
     }
     return result;
 }
 
-int MediaController::creatSurface(std::string *path, ANativeWindow *mWindow, int w, int h) {
+int MediaController::creatSurface(std::string *uuid, ANativeWindow *mWindow, int w, int h) {
     int result = 0;
-    auto it = pathPlayerMap.find(*path);
+    auto it = pathPlayerMap.find(*uuid);
     if (it != pathPlayerMap.end()) {
         if (it->second != nullptr) {
             it->second->mGlThread->postMessage(kMsgSurfaceCreated, w, h, mWindow);
         } else {
             result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
-            LOGE("Player is null on creatSurface  path %s", path);
+            LOGE("Player is null on creatSurface  path %s", uuid);
         }
     } else {
         result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
-        LOGE("Player for path %s not exists on creatSurface", path);
+        LOGE("Player for path %s not exists on creatSurface", uuid);
     }
     return result;
 }
 
-int MediaController::destorySurface(std::string *path) {
+int MediaController::destorySurface(std::string *uuid) {
     int result = 0;
-    auto it = pathPlayerMap.find(*path);
+    auto it = pathPlayerMap.find(*uuid);
     if (it != pathPlayerMap.end()) {
         if (it->second != nullptr) {
             it->second->mGlThread->postMessage(kMsgSurfaceDestroyed);
         } else {
-            LOGE("Player is null on destorySurface  path %s", path);
+            LOGE("Player is null on destorySurface  path %s", uuid);
         }
     } else {
-        LOGE("Player for path %s not exists on destorySurface", path);
+        LOGE("Player for path %s not exists on destorySurface", uuid);
     }
     return result;
 }
 
-int MediaController::changeSurfaceSize(std::string *path, int w, int h) {
+int MediaController::changeSurfaceSize(std::string *uuid, int w, int h) {
     int result = 0;
-    auto it = pathPlayerMap.find(*path);
+    auto it = pathPlayerMap.find(*uuid);
     if (it != pathPlayerMap.end()) {
         if (it->second != nullptr) {
             it->second->mGlThread->postMessage(kMsgSurfaceChanged, w, h);
         } else {
             result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
-            LOGE("Player is null on changeSurfaceSize  path %s", path);
+            LOGE("Player is null on changeSurfaceSize  path %s", uuid);
         }
     } else {
         result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
-        LOGE("Player for path %s not exists on changeSurfaceSize", path);
+        LOGE("Player for path %s not exists on changeSurfaceSize", uuid);
     }
     return result;
 }
 
-int MediaController::closeStream(std::string *path) {
+int MediaController::closeStream(std::string *uuid) {
     int result = 0;
-    auto it = pathPlayerMap.find(*path);
+    auto it = pathPlayerMap.find(*uuid);
     if (it != pathPlayerMap.end()) {
         if (it->second != nullptr) {
             it->second->mFFmpegEncodeStream->closeStream();
@@ -86,47 +84,47 @@ int MediaController::closeStream(std::string *path) {
             it->second = nullptr;
         } else {
             result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
-            LOGE("Player is null on closeStream  path %s", path);
+            LOGE("Player is null on closeStream  path %s", uuid);
         }
         pathPlayerMap.erase(it);
     } else {
         result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
-        LOGE("Player for path %s not exists on closeStream", path);
+        LOGE("Player for path %s not exists on closeStream", uuid);
     }
     return result;
 }
 
-int MediaController::playbackSpeed(std::string *path, double speed) {
+int MediaController::playbackSpeed(std::string *uuid, double speed) {
     int result = 0;
-    auto it = pathPlayerMap.find(*path);
+    auto it = pathPlayerMap.find(*uuid);
     if (it != pathPlayerMap.end()) {
         if (it->second != nullptr) {
             it->second->mFFmpegEncodeStream->playbackSpeed(speed);
         } else {
             result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
-            LOGE("Player is null on playbackSpeed  path %s", path);
+            LOGE("Player is null on playbackSpeed  path %s", uuid);
         }
     } else {
         result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
-        LOGE("Player for path %s not exists on playbackSpeed", path);
+        LOGE("Player for path %s not exists on playbackSpeed", uuid);
     }
     return result;
 }
 
-int MediaController::screenshot(std::string *path, std::string *imagePath) {
+int MediaController::screenshot(std::string *uuid, std::string *imagePath) {
     int result = 0;
-    auto it = pathPlayerMap.find(*path);
+    auto it = pathPlayerMap.find(*uuid);
     if (it != pathPlayerMap.end()) {
         if (it->second != nullptr) {
             LOGE("Player is null on screenshot  path %s", imagePath->c_str());
             it->second->mGlThread->postMessage(kMsgScreenShot, new std::string(*imagePath));
         } else {
             result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
-            LOGE("Player is null on screenshot  path %s", path);
+            LOGE("Player is null on screenshot  path %s", uuid);
         }
     } else {
         result = ERROR_CODE_TO_INT(ErrorCode::PATH_ALREADY_EXIST);
-        LOGE("Player for path %s not exists on screenshot", path);
+        LOGE("Player for path %s not exists on screenshot", uuid);
     }
     return result;
 }
